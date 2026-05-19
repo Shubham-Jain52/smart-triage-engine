@@ -3,7 +3,7 @@
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 import logging
 
-from src.api.v1.schemas import TriageRequest, TriageResponse, TriageAcceptedResponse
+from src.api.v1.schemas import TicketPayload, TicketStatusResponse, TriageAcceptedResponse
 from src.services.triage_service import TriageService
 from src.services.cache_service import CacheService
 
@@ -15,13 +15,23 @@ cache_service = CacheService()
 
 
 @router.post("/triage", response_model=TriageAcceptedResponse, status_code=status.HTTP_202_ACCEPTED)
-async def create_triage(request: TriageRequest, background_tasks: BackgroundTasks):
+async def create_triage(request: TicketPayload, background_tasks: BackgroundTasks):
     logger.info(f"Received triage request for ticket: {request.ticket_id}")
+
+    processing_result = TicketStatusResponse(
+        ticket_id=request.ticket_id,
+        assigned_team="pending",
+        confidence_score=0.0,
+        requires_hitl=False,
+        status="processing"
+    )
+    cache_service.set(request.ticket_id, processing_result)
+
     background_tasks.add_task(triage_service.process_triage, request)
     return TriageAcceptedResponse(ticket_id=request.ticket_id, status="processing")
 
 
-@router.get("/triage/{ticket_id}", response_model=TriageResponse)
+@router.get("/triage/{ticket_id}", response_model=TicketStatusResponse)
 async def get_triage_result(ticket_id: str):
     logger.info(f"Fetching triage result for ticket: {ticket_id}")
     cached_result = cache_service.get(ticket_id)

@@ -1,8 +1,7 @@
-"""ML classifier wrapper for ticket classification."""
+"""ML classifier wrapper using Hugging Face zero-shot pipeline."""
 
-import pickle
 import logging
-from pathlib import Path
+from typing import Tuple, Optional
 
 from src.config import get_settings
 from src.models.preprocessor import TextPreprocessor
@@ -12,46 +11,36 @@ settings = get_settings()
 
 
 class MLClassifier:
-    def __init__(self):
-        self.classifier = None
-        self.vectorizer = None
+    def __init__(self, model_name: Optional[str] = None):
+        self.model_name = model_name or settings.ZS_MODEL_NAME
+        self._pipeline = None
         self.preprocessor = TextPreprocessor()
-        self._load_models()
-    
-    def _load_models(self):
+        self._load_pipeline()
+
+    def _load_pipeline(self):
         try:
-            model_path = Path(settings.MODEL_PATH)
-            vectorizer_path = Path(settings.VECTORIZER_PATH)
-            
-            if model_path.exists():
-                with open(model_path, 'rb') as f:
-                    self.classifier = pickle.load(f)
-                logger.info(f"Loaded classifier from {model_path}")
-            else:
-                logger.warning(f"Classifier not found at {model_path}")
-            
-            if vectorizer_path.exists():
-                with open(vectorizer_path, 'rb') as f:
-                    self.vectorizer = pickle.load(f)
-                logger.info(f"Loaded vectorizer from {vectorizer_path}")
-            else:
-                logger.warning(f"Vectorizer not found at {vectorizer_path}")
+            # Import here to keep import-time lightweight if transformers is not installed
+            from transformers import pipeline
+
+            self._pipeline = pipeline("zero-shot-classification", model=self.model_name)
+            logger.info(f"Loaded zero-shot pipeline with model {self.model_name}")
         except Exception as e:
-            logger.error(f"Error loading models: {e}")
-    
-    def classify(self, title: str, description: str):
-        if not self.classifier or not self.vectorizer:
-            logger.error("Classifier or vectorizer not loaded")
-            raise RuntimeError("ML models not available")
-        
+            logger.error(f"Failed to load Hugging Face pipeline: {e}")
+            self._pipeline = None
+
+    def classify(self, title: str, description: str) -> Tuple[str, float]:
+        if not self._pipeline:
+            raise RuntimeError("Zero-shot pipeline not available")
+
+        text = self.preprocessor.preprocess(title, description)
+        candidate_labels = settings.CANDIDATE_LABELS
+
         try:
-            preprocessed_text = self.preprocessor.preprocess(title, description)
-            vectorized_text = self.vectorizer.transform([preprocessed_text])
-            predicted_class = self.classifier.predict(vectorized_text)[0]
-            predicted_proba = self.classifier.predict_proba(vectorized_text)[0]
-            confidence_score = float(max(predicted_proba))
-            logger.info(f"Classification: {predicted_class} (confidence: {confidence_score:.2f})")
-            return predicted_class, confidence_score
+            output = self._pipeline(text, candidate_labels)
+            label = output.get("labels", [None])[0]
+            score = float(output.get("scores", [0.0])[0])
+            logger.info(f"Zero-shot predicted {label} with score {score:.2f}")
+            return label, score
         except Exception as e:
-            logger.error(f"Classification error: {e}")
+            logger.error(f"Zero-shot classification error: {e}")
             raise

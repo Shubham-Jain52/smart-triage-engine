@@ -4,14 +4,14 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 
 
-class TriageRequest(BaseModel):
-    ticket_id: str = Field(..., description="Unique ticket identifier")
-    title: str = Field(..., description="Ticket title")
-    description: str = Field(..., description="Ticket description")
-    created_at: datetime = Field(..., description="Ticket creation timestamp")
+class TicketPayload(BaseModel):
+    ticket_id: str = Field(..., description="Unique ticket identifier", strict=True)
+    title: str = Field(..., description="Ticket title", strict=True)
+    description: str = Field(..., description="Ticket description", strict=True)
+    created_at: datetime = Field(..., description="Ticket creation timestamp", strict=True)
 
 
-class TriageResponse(BaseModel):
+class TicketStatusResponse(BaseModel):
     ticket_id: str
     assigned_team: str
     confidence_score: float = Field(..., ge=0.0, le=1.0)
