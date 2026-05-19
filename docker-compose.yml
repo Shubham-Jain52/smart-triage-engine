@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  triage-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - LOG_LEVEL=INFO
+      - CONFIDENCE_THRESHOLD=0.80
+      - CACHE_ENABLED=true
+    volumes:
+      - ./src/data:/app/src/data
+    restart: unless-stopped
