@@ -5,10 +5,10 @@ from datetime import datetime
 
 
 class TicketPayload(BaseModel):
-    ticket_id: str = Field(..., description="Unique ticket identifier", strict=True)
-    title: str = Field(..., description="Ticket title", strict=True)
-    description: str = Field(..., description="Ticket description", strict=True)
-    created_at: datetime = Field(..., description="Ticket creation timestamp", strict=True)
+    ticket_id: str = Field(..., description="Unique ticket identifier")
+    title: str = Field(..., description="Ticket title")
+    description: str = Field(..., description="Ticket description")
+    created_at: datetime = Field(..., description="Ticket creation timestamp")
 
 
 class TicketStatusResponse(BaseModel):

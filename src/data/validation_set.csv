@@ -1,0 +1,7 @@
+ticket_id,title,description,expected_team
+v1,Password reset request,User cannot log in to the corporate portal after MFA change,IT Support
+v2,Production deploy failed,Jenkins pipeline errors on kubectl apply to staging cluster,DevOps
+v3,PTO balance wrong,My accrued vacation days do not match HR portal for this fiscal year,HR
+v4,Suspicious login alert,Multiple failed sign-ins from an unknown country overnight,Security
+v5,Laptop will not boot,ThinkPad shows black screen after BIOS splash no beeps,Hardware
+v6,Email bounce 550,Outbound mail to customers rejected with SMTP 550 policy,IT Support

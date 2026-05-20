@@ -1,4 +1,13 @@
-"""ML classifier wrapper using Hugging Face zero-shot pipeline."""
+"""Runtime ticket classifier: Hugging Face zero-shot classification.
+
+Phase 1 uses a **local** pretrained NLI-style model (default ``valhalla/distilbart-mnli-12-1``)
+via ``transformers.pipeline("zero-shot-classification", ...)``. Candidate team names come from
+``Settings.CANDIDATE_LABELS`` (``CANDIDATE_LABELS`` env: comma-separated). No per-request HTTP
+calls to an LLM API; weights load from disk/cache after the first download.
+
+For a lighter TRD-style alternative (TF-IDF + Logistic Regression pickles), see
+``src.models.train`` — not used by this class unless you replace the implementation.
+"""
 
 import logging
 from typing import Tuple, Optional
@@ -7,12 +16,11 @@ from src.config import get_settings
 from src.models.preprocessor import TextPreprocessor
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 
 class MLClassifier:
     def __init__(self, model_name: Optional[str] = None):
-        self.model_name = model_name or settings.ZS_MODEL_NAME
+        self.model_name = model_name or get_settings().ZS_MODEL_NAME
         self._pipeline = None
         self.preprocessor = TextPreprocessor()
         self._load_pipeline()
@@ -33,7 +41,7 @@ class MLClassifier:
             raise RuntimeError("Zero-shot pipeline not available")
 
         text = self.preprocessor.preprocess(title, description)
-        candidate_labels = settings.CANDIDATE_LABELS
+        candidate_labels = get_settings().CANDIDATE_LABELS
 
         try:
             output = self._pipeline(text, candidate_labels)

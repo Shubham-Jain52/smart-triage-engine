@@ -1,4 +1,11 @@
-"""Training utilities for the Smart Triage Engine ML model."""
+"""Optional offline training: TF-IDF + Logistic Regression to pickle artifacts.
+
+The FastAPI runtime classifies tickets with ``MLClassifier`` (Hugging Face zero-shot) by default.
+Run this module only if you want ``MODEL_PATH`` / ``VECTORIZER_PATH`` pickles for experiments
+or a future sklearn-based ``MLClassifier`` swap.
+
+    python -m src.models.train
+"""
 
 import pickle
 from pathlib import Path

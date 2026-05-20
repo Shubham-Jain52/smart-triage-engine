@@ -11,11 +11,19 @@ def test_text_preprocessor_combines_and_normalizes_text():
     assert result == "password reset user cannot log in"
 
 
-def test_ml_classifier_fallback_rule_based_classification():
+def test_ml_classifier_zero_shot_returns_label_and_score(monkeypatch):
+    def fake_load(self):
+        self._pipeline = lambda text, candidate_labels: {
+            "labels": [candidate_labels[0]],
+            "scores": [0.91],
+        }
+
+    monkeypatch.setattr(MLClassifier, "_load_pipeline", fake_load)
     classifier = MLClassifier()
+
     assigned_team, confidence_score = classifier.classify(
         "VPN issue",
-        "My VPN disconnects after login"
+        "My VPN disconnects after login",
     )
 
     assert isinstance(assigned_team, str)

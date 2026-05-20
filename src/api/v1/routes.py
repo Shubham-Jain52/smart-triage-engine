@@ -1,29 +1,41 @@
 """API endpoint definitions."""
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 import logging
 
 from src.api.v1.schemas import TicketPayload, TicketStatusResponse, TriageAcceptedResponse
+from src.api.v1.deps import verify_webhook_ingest_key
 from src.services.triage_service import TriageService
 from src.services.cache_service import CacheService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-triage_service = TriageService()
 cache_service = CacheService()
+triage_service = TriageService(cache_service=cache_service)
 
 
-@router.post("/triage", response_model=TriageAcceptedResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/triage",
+    response_model=TriageAcceptedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(verify_webhook_ingest_key)],
+)
 async def create_triage(request: TicketPayload, background_tasks: BackgroundTasks):
     logger.info(f"Received triage request for ticket: {request.ticket_id}")
+
+    existing = cache_service.get(request.ticket_id)
+    if existing is not None and existing.status in ("completed", "failed"):
+        return TriageAcceptedResponse(ticket_id=request.ticket_id, status=existing.status)
+    if existing is not None and existing.status == "processing":
+        return TriageAcceptedResponse(ticket_id=request.ticket_id, status="processing")
 
     processing_result = TicketStatusResponse(
         ticket_id=request.ticket_id,
         assigned_team="pending",
         confidence_score=0.0,
         requires_hitl=False,
-        status="processing"
+        status="processing",
     )
     cache_service.set(request.ticket_id, processing_result)
 

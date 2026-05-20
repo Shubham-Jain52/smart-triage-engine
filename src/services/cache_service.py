@@ -8,7 +8,6 @@ from src.api.v1.schemas import TicketStatusResponse
 from src.config import get_settings
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 
 class CacheService:
@@ -17,6 +16,7 @@ class CacheService:
         self._lock = threading.RLock()
     
     def get(self, ticket_id: str):
+        settings = get_settings()
         with self._lock:
             if not settings.CACHE_ENABLED or ticket_id not in self._cache:
                 return None
@@ -29,6 +29,7 @@ class CacheService:
             return result
     
     def set(self, ticket_id: str, result: TicketStatusResponse):
+        settings = get_settings()
         with self._lock:
             if settings.CACHE_ENABLED:
                 self._cache[ticket_id] = (result, datetime.now())

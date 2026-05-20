@@ -1,12 +1,11 @@
 """Preprocessor for ticket text.
 
-BERT-style models perform their own tokenization and truncation, so
-the preprocessor's responsibility is lightweight: safely combine the
-ticket fields, normalize whitespace, lowercase, and optionally
-truncate to a maximum character length to keep tokenization fast.
+Combines title and description for NLP models: lowercase, strip punctuation (TRD),
+normalize whitespace, then optional character truncation before tokenization.
 """
 
 import logging
+import string
 
 logger = logging.getLogger(__name__)
 
@@ -14,15 +13,11 @@ logger = logging.getLogger(__name__)
 class TextPreprocessor:
     @staticmethod
     def preprocess(title: str, description: str, max_length_chars: int = 1000) -> str:
-        """Combine `title` and `description` into a single string suitable
-        for model tokenizers.
+        """Combine `title` and `description` into a single string suitable for classifiers.
 
         - Lowercases the combined text
-        - Collapses repeated whitespace
-        - Truncates to `max_length_chars` characters (safe for BERT inputs)
-
-        The tokenizer (e.g. from Hugging Face) should be applied later
-        so it can handle subword tokenization and exact max-token truncation.
+        - Replaces punctuation with spaces, then collapses repeated whitespace
+        - Truncates to `max_length_chars` characters (keeps tokenization fast)
         """
         if not title:
             title = ""
@@ -30,8 +25,9 @@ class TextPreprocessor:
             description = ""
 
         combined = f"{title} {description}".strip()
-        combined = " ".join(combined.split())
         combined = combined.lower()
+        combined = "".join(ch if ch not in string.punctuation else " " for ch in combined)
+        combined = " ".join(combined.split())
 
         if len(combined) > max_length_chars:
             combined = combined[:max_length_chars]
