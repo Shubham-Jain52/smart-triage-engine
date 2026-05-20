@@ -31,6 +31,15 @@
 | Multi-service deploy | **Docker Compose** (API + n8n + optional Ollama) |
 | Configuration | Single root **`.env`** consumed by compose and API |
 
+### Phase 5 — Historical Data Ingestion (Planned)
+
+| Layer | Technology |
+|-------|------------|
+| Source system | **Jira REST API** (JQL search for resolved issues) |
+| Embeddings | **Sentence-Transformers** (same model as Phase 2 retrieval) |
+| Vector store | **Pinecone Python Client** (batch upsert) |
+| Execution | Standalone CLI script **`ingest.py`** (not part of FastAPI process) |
+
 ## 2. API Specifications
 
 ### POST /api/v1/triage
@@ -139,11 +148,84 @@ Executed inside the background triage worker **after** (or in parallel with) ML 
    └── rag_resolution_summary = string
 ```
 
-**Pinecone metadata (recommended):** `ticket_id`, `title`, `resolution_text`, `team`, `resolved_at`.
+**Pinecone metadata (required for Phase 2 + populated by Phase 5):**
+
+| Metadata key | Source | Purpose |
+|--------------|--------|---------|
+| `ticket_id` | Jira issue key | Vector id + `similar_past_tickets` references |
+| `title` | Jira `summary` | Stored for LLM context |
+| `description` | Jira `description` | Stored for audit / optional re-embed |
+| `resolution_text` | Resolution comment or status notes | **Solution** text for RAG generation |
+| `team` | Component / assignee group / custom field | Optional routing context |
+| `resolved_at` | Jira resolution date | Filtering / freshness |
+
+**Embedding input (Phase 5 ingest):** vector computed from **Title + Description** (after text cleaning). Resolution text is stored in metadata for retrieval prompts, not necessarily concatenated into the embedding (configurable; default: problem-only embedding for similarity search).
 
 **Failure behavior:** Log error; return empty RAG fields; do not fail routing if classification succeeded unless configured otherwise.
 
-## 5. n8n Workflow Requirements (Phase 3 — Planned)
+## 5. Phase 5: Ingestion Pipeline (Cold Start — Planned)
+
+Standalone, **one-time** (or occasional re-run) batch job. Runs **before** enabling `RAG_ENABLED` in production, and is **completely separate** from the live FastAPI web server.
+
+### 5.1 APIs & tools
+
+| Component | Role |
+|-----------|------|
+| **Jira REST API** | Search issues via **JQL**; fetch fields and comment history |
+| **sentence-transformers** | Local embedding generation (no embedding API calls) |
+| **Pinecone Python Client** | `upsert` vectors + metadata payloads |
+
+### 5.2 Data pipeline steps
+
+```text
+1. Fetch tickets (Jira REST)
+   └── JQL example: project = PROJ AND status = Resolved
+                    AND resolved >= -12m
+   └── Pagination until window exhausted
+
+2. Extract knowledge per issue
+   └── Problem: fields.summary + fields.description
+   └── Solution: resolution comment (preferred) or resolution field / last internal comment
+
+3. Clean text
+   └── Strip HTML/ADF from Jira description where applicable
+   └── Normalize whitespace; optional shared preprocessor with Phase 1
+
+4. Generate embedding (local)
+   └── Sentence-Transformers on (Title + Description)
+   └── Model: EMBEDDING_MODEL_NAME (same as Phase 2)
+
+5. Upsert to Pinecone
+   └── Vector id = ticket_id (issue key)
+   └── Metadata = { ticket_id, title, description, resolution_text, team, resolved_at }
+   └── Namespace: PINECONE_NAMESPACE (optional)
+
+6. Report
+   └── Count upserted / skipped / failed; log failures per ticket_id
+```
+
+### 5.3 Execution model
+
+| Attribute | Value |
+|-----------|--------|
+| Entry point | `ingest.py` (project root or `scripts/ingest.py`) |
+| Invocation | `python ingest.py` or `PYTHONPATH=. python scripts/ingest.py` |
+| Process | CLI batch job; **no HTTP server** |
+| Config | Reads same `.env` as API (`PINECONE_*`, `JIRA_*`, `EMBEDDING_MODEL_NAME`, `INGEST_MONTHS=12`) |
+| Idempotency | Upsert by `ticket_id`; safe to re-run after Jira backfill |
+
+### 5.4 Relationship to other phases
+
+```text
+Phase 5 (ingest.py)  ──►  Pinecone index populated
+                              │
+Phase 2 (live RAG)   ◄──  query + LLM (requires non-empty index)
+Phase 3 (n8n)        ◄──  uses Phase 2 output on new tickets
+```
+
+Optional future work (out of Phase 5 scope): continuous ingest on Jira “issue resolved” events via n8n or webhook—not the one-time cold-start script.
+
+## 6. n8n Workflow Requirements (Phase 3 — Planned)
 
 Reference implementation lives under `integrations/n8n/`. Minimum node graph:
 
@@ -177,7 +259,19 @@ HITL required: {{ $json.requires_hitl }}
 
 See [INTEGRATION_N8N_JIRA.md](INTEGRATION_N8N_JIRA.md) for poll vs callback patterns.
 
-## 6. Architectural Workflow (End-to-End)
+## 7. Architectural Workflow (End-to-End)
+
+### 7.1 One-time bootstrap (Phase 5)
+
+```text
+Operator runs ingest.py
+    → Jira REST (JQL: resolved tickets, last 12 months)
+    → Clean + embed (Title + Description)
+    → Pinecone upsert (metadata includes resolution comment)
+    → Index ready for Phase 2 retrieval
+```
+
+### 7.2 Live ticket flow (Phases 1–3)
 
 ```text
 Jira (Issue Created)
@@ -185,12 +279,12 @@ Jira (Issue Created)
     → HTTP POST /api/v1/triage (202)
     → FastAPI BackgroundTasks
          ├─ Zero-shot classify → assigned_team, confidence, requires_hitl
-         └─ RAG pipeline → similar_past_tickets, rag_resolution_summary
+         └─ RAG pipeline (Phase 2) → similar_past_tickets, rag_resolution_summary
     → GET result OR callback POST to n8n webhook
     → n8n Jira: Update assignee + Add internal comment
 ```
 
-## 7. Docker Compose Topology (Phase 4 — Planned)
+## 8. Docker Compose Topology (Phase 4 — Planned)
 
 | Service | Role | Ports (example) |
 |---------|------|-----------------|
@@ -200,7 +294,7 @@ Jira (Issue Created)
 
 **Configuration:** All services read from shared `.env` (Pinecone, Jira URLs for n8n credentials, `CANDIDATE_LABELS`, `RAG_ENABLED`, etc.).
 
-## 8. Target Project Structure
+## 9. Target Project Structure
 
 See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for the full proposed tree. Summary:
 
@@ -222,7 +316,8 @@ ticket_routing_agent/
 ├── scripts/
 │   ├── evaluate_accuracy.py
 │   ├── latency_sample.py
-│   └── ingest_historical_tickets.py   # Phase 2: Pinecone seeding
+│   ├── ingest_historical_tickets.py   # Optional CSV seed (dev/demo)
+│   └── ingest.py                      # Phase 5: Jira → Pinecone cold start (primary)
 ├── src/
 │   ├── api/v1/
 │   ├── models/
@@ -242,7 +337,7 @@ ticket_routing_agent/
     └── ...
 ```
 
-## 9. Implementation Status
+## 10. Implementation Status
 
 | Area | Phase | Status |
 |------|-------|--------|
@@ -254,12 +349,15 @@ ticket_routing_agent/
 | RAG: embeddings + Pinecone query | 2 | Planned |
 | RAG: LLM resolution summary | 2 | Planned |
 | API schema: `rag_resolution_summary`, `similar_past_tickets` | 2 | Planned |
-| Historical ingest script → Pinecone | 2 | Planned |
 | n8n workflow exports + Jira write-back | 3 | Planned |
 | docker-compose (api + n8n + ollama) | 4 | Planned |
 | Single `.env` for full stack | 4 | Planned |
+| **`ingest.py` Jira → Pinecone cold start** | 5 | Planned |
+| Jira JQL fetch + resolution comment extraction | 5 | Planned |
+| Batch upsert with full metadata | 5 | Planned |
+| CSV seed script (`ingest_historical_tickets.py`) | 2/5 | Planned (dev fallback) |
 
-## 10. Environment Variables (Planned additions)
+## 11. Environment Variables (Planned additions)
 
 | Variable | Phase | Purpose |
 |----------|-------|---------|
@@ -273,5 +371,14 @@ ticket_routing_agent/
 | `OLLAMA_MODEL` | 2 | Model tag for resolution generation |
 | `LLM_PROVIDER` | 2 | `ollama` \| `openai` \| … |
 | `N8N_HOST`, `TRIAGE_API_URL` | 4 | Compose service URLs |
+| `JIRA_BASE_URL` | 5 | e.g. `https://<site>.atlassian.net` |
+| `JIRA_EMAIL` | 5 | API token owner email (Cloud) |
+| `JIRA_API_TOKEN` | 5 | BYOK Jira credential |
+| `JIRA_PROJECT_KEY` | 5 | Scope ingest to one project |
+| `INGEST_JQL` | 5 | Override default resolved-ticket query |
+| `INGEST_MONTHS` | 5 | Lookback window (default `12`) |
+| `INGEST_BATCH_SIZE` | 5 | Pinecone upsert batch size |
 
 Existing Phase 1 variables remain documented in [`.env.example`](../.env.example).
+
+**Recommended run order:** Phase 5 `ingest.py` → enable `RAG_ENABLED` (Phase 2) → Phase 3 n8n live workflow → Phase 4 compose for packaging.

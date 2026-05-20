@@ -10,10 +10,11 @@ The **Automated Ticket Routing** product is a **headless, Bring-Your-Own-Key (BY
 | **Phase 2** | RAG Resolution Engine | **Planned** — historical ticket retrieval + LLM-generated resolution strategy |
 | **Phase 3** | n8n Orchestration | **Planned** — Jira webhooks, triage trigger, write-back to Jira |
 | **Phase 4** | Packaging & Local Stack | **Planned** — single `docker-compose up`, single `.env` for all services |
+| **Phase 5** | Historical Data Ingestion (Cold Start) | **Planned** — one-time Jira → Pinecone backfill before live RAG |
 
 **Phase 1 objective:** Intercept incoming IT tickets, classify them with a local ML model, and route to the correct functional team with confidence-based HITL flagging—without mandatory external LLM APIs for classification.
 
-**Expanded product objective (Phases 2–4):** After routing, automatically surface **similar past tickets** and a **concise resolution strategy** from organizational history, then deliver that intelligence **inside Jira** via orchestration—while keeping embeddings and inference configurable under BYOK (customer-supplied Pinecone, Ollama, or optional cloud LLM keys).
+**Expanded product objective (Phases 2–5):** Before live RAG is useful, **backfill Pinecone** with resolved Jira history (Phase 5). After routing, automatically surface **similar past tickets** and a **concise resolution strategy** from that knowledge base (Phase 2), then deliver intelligence **inside Jira** via orchestration (Phase 3)—while keeping embeddings and inference configurable under BYOK (customer-supplied Pinecone, Ollama, or optional cloud LLM keys).
 
 ## 2. Core Features
 
@@ -41,6 +42,15 @@ The **Automated Ticket Routing** product is a **headless, Bring-Your-Own-Key (BY
 * **One-command local stack:** API, ML dependencies, n8n, and optional Ollama/Pinecone clients configured via a **single root `.env`** and **`docker-compose up`**.
 * **BYOK:** Customers supply their own Pinecone index/API key and LLM endpoint (Ollama local or cloud API keys); secrets never ship in the image.
 
+### Phase 5 — Historical Data Ingestion (Cold Start Resolution) (Planned)
+
+* **Objective:** Populate the vector database with **past organizational knowledge** before the live RAG pipeline (Phase 2) is activated—eliminating the empty-index “cold start” where retrieval returns no useful matches.
+* **Jira Data Extraction:** A **standalone** ingestion script queries the **Jira REST API** for tickets **resolved in the past 12 months** (configurable window), independent of the FastAPI server.
+* **Knowledge Mapping:** For each closed ticket, capture:
+  - **Problem:** original **Title** + **Description**
+  - **Solution:** final **resolution comment** and/or resolution **status** metadata from Jira
+* **Vector Load:** Embed problem text locally and **upsert** into Pinecone with full **metadata** (ticket id, problem text, resolution text, team, resolved date) so Phase 2 retrieval can return both **similar ticket IDs** and **resolution context** for the LLM.
+
 ## 3. Success Metrics
 
 ### Phase 1
@@ -61,6 +71,12 @@ The **Automated Ticket Routing** product is a **headless, Bring-Your-Own-Key (BY
 * **Packaging:** Fresh clone → `cp .env.example .env` → `docker-compose up` → health checks green for API and n8n within documented startup time.
 * **Zero-UI:** Agents see routing + RAG comment only in Jira; no login to a separate triage portal.
 
+### Phase 5
+
+* **Ingestion completeness:** Successfully upload a **batch of historical resolved tickets** (target: 12-month window per project) to Pinecone with **correct metadata** (`ticket_id`, problem text, `resolution_text`, team, `resolved_at`).
+* **Retrieval readiness:** After ingest, a sample query from Phase 2 retriever returns ≥ 1 relevant neighbor for typical IT tickets in the same project (smoke test documented in runbook).
+* **Operational safety:** Ingest is **idempotent** by `ticket_id` (re-runs upsert/update without duplicate vectors); failures logged per issue without aborting the entire batch.
+
 ## 4. User Experience Principles
 
 * **Jira-native:** Create ticket → automation runs → assignee/labels updated → internal comment with suggested resolution.
@@ -77,4 +93,4 @@ The **Automated Ticket Routing** product is a **headless, Bring-Your-Own-Key (BY
 
 * [TRD.md](TRD.md) — technical architecture, API contracts, RAG flow, n8n nodes
 * [INTEGRATION_N8N_JIRA.md](INTEGRATION_N8N_JIRA.md) — Jira + n8n integration guide
-* [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) — Phase 2/4 build checklist and target folder structure
+* [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) — Phase 2/4/5 build checklist and target folder structure
