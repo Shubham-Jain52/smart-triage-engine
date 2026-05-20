@@ -129,7 +129,8 @@ This runs the same `MLClassifier` as production; results depend on model, labels
 
 ## Documentation
 
-- [docs/PRD.md](docs/PRD.md) — product requirements
-- [docs/TRD.md](docs/TRD.md) — technical requirements and implementation notes
+- [docs/PRD.md](docs/PRD.md) — product requirements (Phases 1–4: triage, RAG, n8n, packaging)
+- [docs/TRD.md](docs/TRD.md) — technical architecture, API contracts, RAG flow
+- [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) — Phase 2/4 build checklist and target folder structure
 - [docs/INTEGRATION_N8N_JIRA.md](docs/INTEGRATION_N8N_JIRA.md) — Jira + n8n integration
 - [docs/HANDOFF_N8N_JIRA_PROMPT.md](docs/HANDOFF_N8N_JIRA_PROMPT.md) — handoff prompt for building n8n workflows
