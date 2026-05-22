@@ -352,9 +352,11 @@ ticket_routing_agent/
 | n8n workflow exports + Jira write-back | 3 | Planned |
 | docker-compose (api + n8n + ollama) | 4 | Planned |
 | Single `.env` for full stack | 4 | Planned |
-| **`ingest.py` Jira → Pinecone cold start** | 5 | Planned |
-| Jira JQL fetch + resolution comment extraction | 5 | Planned |
-| Batch upsert with full metadata | 5 | Planned |
+| **`ingest.py` Jira → Pinecone cold start** | 5 | **Implemented** ([`scripts/ingest.py`](../scripts/ingest.py)) |
+| Jira JQL fetch + resolution comment extraction | 5 | **Implemented** ([`src/integrations/jira/`](../src/integrations/jira/)) |
+| Batch upsert with full metadata | 5 | **Implemented** ([`src/rag/pinecone_client.py`](../src/rag/pinecone_client.py)) |
+| Index setup script | 5 | **Implemented** ([`scripts/setup_pinecone_index.py`](../scripts/setup_pinecone_index.py)) |
+| Smoke query script | 5 | **Implemented** ([`scripts/pinecone_smoke_query.py`](../scripts/pinecone_smoke_query.py)) |
 | CSV seed script (`ingest_historical_tickets.py`) | 2/5 | Planned (dev fallback) |
 
 ## 11. Environment Variables (Planned additions)

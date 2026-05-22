@@ -1,0 +1,13 @@
+ticket_id,title,description,resolution_text,team,resolved_at
+DEMO-101,Cannot connect to VPN,User reports VPN disconnects after two minutes on Fedora laptop,Renewed client certificate and cleared stale gateway sessions. Issue resolved.,IT Support,2025-11-01T10:00:00Z
+DEMO-102,Production deploy failed,Jenkins pipeline fails on kubectl apply to staging cluster,Rolled back bad Helm chart revision and fixed image tag in values.yaml,DevOps,2025-10-15T14:30:00Z
+DEMO-103,PTO balance incorrect,Accrued vacation days do not match HR portal for fiscal year,HR corrected accrual table after payroll sync mismatch,HR,2025-09-20T09:00:00Z
+DEMO-104,Suspicious login attempts,Multiple failed sign-ins from unknown country overnight,Forced password reset and enabled geo-blocking on IdP,Security,2025-12-01T08:15:00Z
+DEMO-105,Laptop black screen after BIOS,ThinkPad shows black screen after splash no beeps,Replaced faulty RAM module and updated BIOS firmware,Hardware,2025-08-10T16:45:00Z
+DEMO-106,Email bounce SMTP 550,Outbound mail to customers rejected with error 550,Removed sender from blocklist and updated SPF record,IT Support,2025-11-18T11:20:00Z
+DEMO-107,Database connection timeout,Application queries timing out on customer DB during peak hours,Increased connection pool size and added read replica for reporting,DevOps,2025-10-02T13:00:00Z
+DEMO-108,New hire onboarding access,Contractor cannot access internal wiki and Slack,Provisioned accounts in Okta and assigned correct group memberships,HR,2025-07-25T10:30:00Z
+DEMO-109,Phishing email reported,User forwarded suspicious invoice attachment,Quarantined message cluster-wide and blocked sender domain,Security,2025-12-10T15:00:00Z
+DEMO-110,Printer paper jam persists,Office printer shows jam after tray cleared,Replaced worn pickup roller and calibrated tray sensors,Hardware,2025-09-05T12:00:00Z
+DEMO-111,VPN certificate expired,Remote users cannot authenticate to corporate VPN,Deployed new cert bundle to gateway and pushed client profile update,IT Support,2025-11-25T09:45:00Z
+DEMO-112,Kubernetes pod crash loop,Payment service pods restarting with OOMKilled,Raised memory limits and fixed memory leak in latest hotfix release,DevOps,2025-10-28T18:00:00Z

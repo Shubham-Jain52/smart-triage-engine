@@ -30,6 +30,30 @@ class Settings:
 
         self.WEBHOOK_INGEST_API_KEY: str = os.getenv("WEBHOOK_INGEST_API_KEY", "").strip()
 
+        # Phase 2 / 5 — RAG & Pinecone (BYOK)
+        self.RAG_ENABLED: bool = os.getenv("RAG_ENABLED", "false").lower() == "true"
+        self.PINECONE_API_KEY: str = os.getenv("PINECONE_API_KEY", "").strip()
+        self.PINECONE_INDEX_NAME: str = os.getenv("PINECONE_INDEX_NAME", "ticket-routing").strip()
+        self.PINECONE_NAMESPACE: str = os.getenv("PINECONE_NAMESPACE", "").strip()
+        self.PINECONE_CLOUD: str = os.getenv("PINECONE_CLOUD", "aws").strip()
+        self.PINECONE_REGION: str = os.getenv("PINECONE_REGION", "us-east-1").strip()
+        self.EMBEDDING_MODEL_NAME: str = os.getenv(
+            "EMBEDDING_MODEL_NAME", "sentence-transformers/all-MiniLM-L6-v2"
+        ).strip()
+        self.RAG_TOP_K: int = int(os.getenv("RAG_TOP_K", "3"))
+
+        # Phase 5 — Jira historical ingest
+        self.JIRA_BASE_URL: str = os.getenv("JIRA_BASE_URL", "").strip().rstrip("/")
+        self.JIRA_EMAIL: str = os.getenv("JIRA_EMAIL", "").strip()
+        self.JIRA_API_TOKEN: str = os.getenv("JIRA_API_TOKEN", "").strip()
+        self.JIRA_PROJECT_KEY: str = os.getenv("JIRA_PROJECT_KEY", "").strip()
+        self.INGEST_MONTHS: int = int(os.getenv("INGEST_MONTHS", "12"))
+        self.INGEST_JQL: str = os.getenv("INGEST_JQL", "").strip()
+        self.INGEST_BATCH_SIZE: int = int(os.getenv("INGEST_BATCH_SIZE", "100"))
+        self.INGEST_MAX_ISSUES: int = int(os.getenv("INGEST_MAX_ISSUES", "0"))  # 0 = no limit
+        self.INGEST_SOURCE: str = os.getenv("INGEST_SOURCE", "dummy").strip().lower()
+        self.INGEST_CSV_PATH: str = os.getenv("INGEST_CSV_PATH", "").strip()
+
 
 @lru_cache()
 def get_settings() -> Settings:

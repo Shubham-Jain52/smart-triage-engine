@@ -127,9 +127,22 @@ PYTHONPATH=. python scripts/evaluate_accuracy.py path/to/your_labeled.csv
 
 This runs the same `MLClassifier` as production; results depend on model, labels, and ticket wording.
 
+## Phase 5: Pinecone cold-start
+
+Backfill Pinecone before enabling RAG. **No Jira required** for local dev — uses bundled dummy CSV by default; switch to `--source jira` later.
+
+```bash
+PYTHONPATH=. python scripts/setup_pinecone_index.py
+PYTHONPATH=. python scripts/ingest.py                    # dummy CSV
+PYTHONPATH=. python scripts/ingest.py --source jira      # when Jira is ready
+PYTHONPATH=. python scripts/pinecone_smoke_query.py "VPN issue"
+```
+
+See [docs/PHASE5_SETUP.md](docs/PHASE5_SETUP.md).
+
 ## Documentation
 
-- [docs/PRD.md](docs/PRD.md) — product requirements (Phases 1–4: triage, RAG, n8n, packaging)
+- [docs/PRD.md](docs/PRD.md) — product requirements (Phases 1–5)
 - [docs/TRD.md](docs/TRD.md) — technical architecture, API contracts, RAG flow
 - [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) — Phase 2/4 build checklist and target folder structure
 - [docs/INTEGRATION_N8N_JIRA.md](docs/INTEGRATION_N8N_JIRA.md) — Jira + n8n integration
