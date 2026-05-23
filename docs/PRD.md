@@ -8,7 +8,7 @@ The **Automated Ticket Routing** product is a **headless, Bring-Your-Own-Key (BY
 |-------|------|--------|
 | **Phase 1** | ML Triage Engine | **Implemented** — webhook ingest, zero-shot routing, HITL, async processing, optional outbound callback |
 | **Phase 2** | RAG Resolution Engine | **Implemented** — Pinecone retrieval + Mermaid flowcharts via BYOK LLM |
-| **Phase 3** | Jira Orchestration (Python) | **Planned** — poll/webhook worker, assignee update, post flowcharts to Jira |
+| **Phase 3** | Jira Orchestration (Python) | **Implemented** — worker, team mapping, flowchart comments |
 | **Phase 3.1** | On-Resolve Re-Ingest | **Implemented** — Jira resolve → Pinecone upsert (webhook + poll fallback) |
 | **Phase 4** | Packaging & Local Stack | **Planned** — single `docker-compose up`, single `.env` for all services |
 | **Phase 5** | Historical Data Ingestion (Cold Start) | **Implemented** — one-time Jira/CSV → Pinecone backfill before live RAG |
@@ -34,7 +34,7 @@ The **Automated Ticket Routing** product is a **headless, Bring-Your-Own-Key (BY
 * **Past-resolutions flowchart:** The same pipeline synthesizes a second **Mermaid flowchart** showing how **similar historical tickets** were resolved (merged pattern from top-k matches): typical steps, checks, and fixes—so the team gets a mental map of proven resolution flows rather than reading N separate ticket threads.
 * **Enriched triage output:** Expose `problem_flowchart_mermaid`, `resolution_flowchart_mermaid`, and a short optional `rag_resolution_summary` (caption). Keep `similar_past_tickets` in the API for **audit/debug** only; Jira comments emphasize the two diagrams.
 
-### Phase 3 — Workflow Orchestration (Planned)
+### Phase 3 — Workflow Orchestration (Implemented)
 
 * **Python Jira worker:** Poll or webhook-triggered service calls the triage API and writes results back to Jira (replaces n8n for this project).
 * **Assignee routing:** Update assignee (or component/labels) from `assigned_team` and HITL rules.

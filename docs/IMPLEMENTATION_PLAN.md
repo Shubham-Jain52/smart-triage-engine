@@ -123,11 +123,13 @@ ticket_routing_agent/
 
 Can start after Phase 2 diagram fields exist on GET/callback.
 
-- [ ] `src/integrations/jira/worker.py` (or `scripts/run_jira_worker.py`): poll/webhook → POST triage → GET result.
-- [ ] `src/integrations/jira/comment_formatter.py`: build Jira comment from caption + two fenced Mermaid blocks (see [TRD §6](TRD.md)).
-- [ ] `jira-team-mapping.example.json` for `assigned_team` → assignee/component; respect `requires_hitl`.
-- [ ] Env: `INCLUDE_TICKET_IDS_IN_COMMENT=false` by default.
-- [ ] End-to-end test: issue created → comment shows **problem** and **resolution** flowcharts (not a similar-ticket bullet list).
+- [x] `src/integrations/jira/worker.py` + `scripts/run_jira_worker.py`: poll/`--issue` → POST triage → GET result.
+- [x] `src/integrations/jira/comment_formatter.py`: caption + two fenced Mermaid blocks (ADF for Jira Cloud).
+- [x] `integrations/n8n/jira-team-mapping.example.json` for `assigned_team` → assignee/component; respect `requires_hitl`.
+- [x] Env: `INCLUDE_TICKET_IDS_IN_COMMENT=false` by default, `TRIAGE_API_URL`, `JIRA_TEAM_MAPPING_PATH`, etc.
+- [x] Tests: `tests/test_jira_worker.py`, `tests/test_comment_formatter.py`, `tests/test_team_mapping.py`.
+- [x] Docs: [PHASE3_SETUP.md](PHASE3_SETUP.md).
+- [ ] Manual E2E: create Jira issue → worker → comment shows **problem** and **resolution** flowcharts.
 
 **Deferred / optional:** n8n workflow exports under `integrations/n8n/` if a team prefers no-code ops later.
 

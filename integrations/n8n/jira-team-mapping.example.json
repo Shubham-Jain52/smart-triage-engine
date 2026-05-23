@@ -1,0 +1,30 @@
+{
+  "IT Support": {
+    "component": "IT Support",
+    "assigneeAccountId": null,
+    "labels": ["auto-routed"]
+  },
+  "DevOps": {
+    "component": "DevOps",
+    "assigneeAccountId": null,
+    "labels": ["auto-routed"]
+  },
+  "HR": {
+    "component": "HR",
+    "assigneeAccountId": null,
+    "labels": ["auto-routed"]
+  },
+  "Security": {
+    "component": "Security",
+    "assigneeAccountId": null,
+    "labels": ["auto-routed"]
+  },
+  "Hardware": {
+    "component": "Hardware",
+    "assigneeAccountId": null,
+    "labels": ["auto-routed"]
+  },
+  "hitl": {
+    "labels": ["hitl", "needs-review"]
+  }
+}

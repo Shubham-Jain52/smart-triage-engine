@@ -63,14 +63,23 @@ When `TRIAGE_CALLBACK_URL` is non-empty, after each triage finishes (`completed`
 
 ## Jira integration (Phase 3 — Python worker)
 
-The triage service does **not** update Jira by itself. A **Python worker** will:
+The triage service does **not** update Jira by itself. Run the **Python worker**:
 
-1. Trigger on new Jira issues → **POST** `/api/v1/triage`
-2. **Poll** `GET /api/v1/triage/{issue_key}` (or use callback)
-3. Update assignee/labels from `assigned_team` and `requires_hitl`
-4. Post an internal comment with **Mermaid flowcharts** (current **problem** map + **how similar issues were resolved**) — not a raw list of similar ticket IDs
+```bash
+# Process one issue (manual or cron after Jira Automation)
+PYTHONPATH=. python scripts/run_jira_worker.py --issue PROJ-42
 
-See [docs/TRD.md](docs/TRD.md) §4 (RAG flowcharts) and §6 (comment template). Optional n8n path: [docs/INTEGRATION_N8N_JIRA.md](docs/INTEGRATION_N8N_JIRA.md).
+# Poll for new issues every N minutes (cron fallback)
+PYTHONPATH=. python scripts/run_jira_worker.py --once
+```
+
+The worker:
+
+1. Fetches the Jira issue → **POST** `/api/v1/triage` → poll **GET** result
+2. Updates assignee/component/labels from `assigned_team` and `requires_hitl` (see team mapping JSON)
+3. Posts an internal comment with **Mermaid flowcharts** (problem + resolution maps)
+
+See [docs/PHASE3_SETUP.md](docs/PHASE3_SETUP.md). Optional n8n path: [docs/INTEGRATION_N8N_JIRA.md](docs/INTEGRATION_N8N_JIRA.md).
 
 ## Simulator integration
 
@@ -175,6 +184,7 @@ See [docs/PHASE3_1_ON_RESOLVE_INGEST.md](docs/PHASE3_1_ON_RESOLVE_INGEST.md).
 - [docs/TRD.md](docs/TRD.md) — technical architecture, API contracts, RAG flow
 - [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) — Phase 2/4 build checklist and target folder structure
 - [docs/PHASE2_SETUP.md](docs/PHASE2_SETUP.md) — enable RAG flowcharts (Ollama + Pinecone)
+- [docs/PHASE3_SETUP.md](docs/PHASE3_SETUP.md) — Jira worker (routing + flowchart comments)
 - [docs/PHASE3_1_ON_RESOLVE_INGEST.md](docs/PHASE3_1_ON_RESOLVE_INGEST.md) — on-resolve continuous re-ingest
 - [docs/INTEGRATION_N8N_JIRA.md](docs/INTEGRATION_N8N_JIRA.md) — Jira + n8n integration
 - [docs/HANDOFF_N8N_JIRA_PROMPT.md](docs/HANDOFF_N8N_JIRA_PROMPT.md) — handoff prompt for building n8n workflows

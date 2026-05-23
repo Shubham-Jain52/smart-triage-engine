@@ -79,6 +79,25 @@ class Settings:
             os.getenv("INGEST_ON_RESOLVE_POLL_INTERVAL_SECONDS", "300")
         )
 
+        # Phase 3 — Jira triage worker
+        self.TRIAGE_API_URL: str = os.getenv("TRIAGE_API_URL", "http://127.0.0.1:8000").strip().rstrip("/")
+        self.TRIAGE_POLL_INTERVAL_SECONDS: float = float(os.getenv("TRIAGE_POLL_INTERVAL_SECONDS", "2"))
+        self.TRIAGE_POLL_MAX_ATTEMPTS: int = int(os.getenv("TRIAGE_POLL_MAX_ATTEMPTS", "60"))
+        self.TRIAGE_POLL_TIMEOUT_SECONDS: float = float(os.getenv("TRIAGE_POLL_TIMEOUT_SECONDS", "30"))
+        self.JIRA_TEAM_MAPPING_PATH: str = os.getenv(
+            "JIRA_TEAM_MAPPING_PATH",
+            "integrations/n8n/jira-team-mapping.example.json",
+        ).strip()
+        self.JIRA_WORKER_POLL_MINUTES: int = int(os.getenv("JIRA_WORKER_POLL_MINUTES", "15"))
+        self.JIRA_WORKER_POLL_INTERVAL_SECONDS: int = int(
+            os.getenv("JIRA_WORKER_POLL_INTERVAL_SECONDS", "300")
+        )
+        self.JIRA_WORKER_PROCESSED_LABEL: str = os.getenv("JIRA_WORKER_PROCESSED_LABEL", "auto-triaged").strip()
+        self.INCLUDE_TICKET_IDS_IN_COMMENT: bool = (
+            os.getenv("INCLUDE_TICKET_IDS_IN_COMMENT", "false").lower() == "true"
+        )
+        self.JIRA_COMMENT_VISIBILITY_ROLE: str = os.getenv("JIRA_COMMENT_VISIBILITY_ROLE", "").strip()
+
 
 @lru_cache()
 def get_settings() -> Settings:

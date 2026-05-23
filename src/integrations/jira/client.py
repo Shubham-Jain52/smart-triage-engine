@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 RESOLVED_STATUSES = frozenset({"Resolved", "Done", "Closed"})
 ISSUE_FIELDS = "summary,description,resolutiondate,components,comment,status"
+WORKER_ISSUE_FIELDS = "summary,description,created,status,labels,components,assignee"
 
 
 @dataclass
@@ -27,6 +28,18 @@ class HistoricalTicket:
     team: str
     resolved_at: str
     status: str = ""
+
+
+@dataclass
+class WorkerIssue:
+    """Open issue snapshot for Phase 3 triage worker."""
+
+    ticket_id: str
+    title: str
+    description: str
+    created_at: str
+    status: str = ""
+    labels: List[str] = field(default_factory=list)
 
 
 class JiraClient:
@@ -97,12 +110,78 @@ class JiraClient:
         jql = self.recently_resolved_jql(since_minutes, project_key)
         return self.fetch_resolved_tickets(jql=jql)
 
-    def search_issues(self, jql: str, max_results: int = 50, start_at: int = 0) -> Dict[str, Any]:
+    def recently_created_jql(
+        self,
+        since_minutes: int,
+        project_key: Optional[str] = None,
+        exclude_label: Optional[str] = None,
+    ) -> str:
+        settings = get_settings()
+        key = (project_key or settings.JIRA_PROJECT_KEY).strip()
+        if not key:
+            raise ValueError("JIRA_PROJECT_KEY is required for recently created JQL")
+        label = (exclude_label if exclude_label is not None else settings.JIRA_WORKER_PROCESSED_LABEL).strip()
+        jql = f'project = "{key}" AND created >= -{since_minutes}m'
+        if label:
+            jql += f' AND labels != "{label}"'
+        return f"{jql} ORDER BY created DESC"
+
+    def get_worker_issue(self, issue_key: str) -> Optional[WorkerIssue]:
+        with httpx.Client(timeout=60.0) as client:
+            r = client.get(
+                f"{self._api}/issue/{issue_key}",
+                params={"fields": WORKER_ISSUE_FIELDS},
+                auth=self._auth,
+                headers={"Accept": "application/json"},
+            )
+            r.raise_for_status()
+            return self._parse_worker_issue(r.json())
+
+    def fetch_recently_created(
+        self,
+        since_minutes: int,
+        project_key: Optional[str] = None,
+        max_issues: int = 50,
+    ) -> List[WorkerIssue]:
+        jql = self.recently_created_jql(since_minutes, project_key)
+        page_size = min(50, max_issues)
+        start_at = 0
+        issues: List[WorkerIssue] = []
+
+        while len(issues) < max_issues:
+            data = self.search_issues(
+                jql,
+                max_results=page_size,
+                start_at=start_at,
+                fields=WORKER_ISSUE_FIELDS,
+            )
+            batch = data.get("issues") or []
+            if not batch:
+                break
+            for raw in batch:
+                parsed = self._parse_worker_issue(raw)
+                if parsed:
+                    issues.append(parsed)
+                if len(issues) >= max_issues:
+                    break
+            if len(batch) < page_size:
+                break
+            start_at += len(batch)
+
+        return issues
+
+    def search_issues(
+        self,
+        jql: str,
+        max_results: int = 50,
+        start_at: int = 0,
+        fields: Optional[str] = None,
+    ) -> Dict[str, Any]:
         params = {
             "jql": jql,
             "startAt": start_at,
             "maxResults": max_results,
-            "fields": ISSUE_FIELDS,
+            "fields": fields or ISSUE_FIELDS,
         }
         with httpx.Client(timeout=60.0) as client:
             r = client.get(
@@ -146,6 +225,80 @@ class JiraClient:
                 break
 
         return tickets
+
+    def add_comment(self, issue_key: str, adf_body: Dict[str, Any]) -> None:
+        """Add a comment using Atlassian Document Format body."""
+        payload: Dict[str, Any] = {"body": adf_body}
+        settings = get_settings()
+        role = settings.JIRA_COMMENT_VISIBILITY_ROLE.strip()
+        if role:
+            payload["visibility"] = {"type": "role", "value": role}
+
+        with httpx.Client(timeout=60.0) as client:
+            r = client.post(
+                f"{self._api}/issue/{issue_key}/comment",
+                json=payload,
+                auth=self._auth,
+                headers={"Accept": "application/json", "Content-Type": "application/json"},
+            )
+            r.raise_for_status()
+        logger.info("Added triage comment to %s", issue_key)
+
+    def update_issue_routing(
+        self,
+        issue_key: str,
+        *,
+        component: Optional[str] = None,
+        assignee_account_id: Optional[str] = None,
+        labels_to_add: Optional[List[str]] = None,
+        current_labels: Optional[List[str]] = None,
+    ) -> None:
+        """Update assignee, component, and/or merge labels."""
+        fields: Dict[str, Any] = {}
+        if component:
+            fields["components"] = [{"name": component}]
+        if assignee_account_id:
+            fields["assignee"] = {"accountId": assignee_account_id}
+        if labels_to_add:
+            merged = list(dict.fromkeys((current_labels or []) + labels_to_add))
+            fields["labels"] = merged
+
+        if not fields:
+            return
+
+        with httpx.Client(timeout=60.0) as client:
+            r = client.put(
+                f"{self._api}/issue/{issue_key}",
+                json={"fields": fields},
+                auth=self._auth,
+                headers={"Accept": "application/json", "Content-Type": "application/json"},
+            )
+            r.raise_for_status()
+        logger.info("Updated Jira routing fields on %s", issue_key)
+
+    def _parse_worker_issue(self, issue: Dict[str, Any]) -> Optional[WorkerIssue]:
+        key = issue.get("key") or issue.get("id")
+        fields = issue.get("fields") or {}
+        if not key:
+            return None
+
+        title = (fields.get("summary") or "").strip()
+        description = jira_description_to_text(fields.get("description"))
+        created = fields.get("created") or ""
+        if not title and not description:
+            return None
+
+        status_obj = fields.get("status") or {}
+        labels = list(fields.get("labels") or [])
+
+        return WorkerIssue(
+            ticket_id=str(key),
+            title=title,
+            description=description,
+            created_at=created,
+            status=(status_obj.get("name") or "").strip(),
+            labels=labels,
+        )
 
     def _parse_issue(self, issue: Dict[str, Any]) -> Optional[HistoricalTicket]:
         key = issue.get("key") or issue.get("id")

@@ -418,7 +418,10 @@ ticket_routing_agent/
 | RAG: LLM client (Ollama / OpenAI) | 2 | **Implemented** ([`src/integrations/llm/client.py`](../src/integrations/llm/client.py)) |
 | RAG: `rag_service` orchestration | 2 | **Implemented** ([`src/services/rag_service.py`](../src/services/rag_service.py)) |
 | API schema: `problem_flowchart_mermaid`, `resolution_flowchart_mermaid`, audit `similar_past_tickets` | 2 | **Implemented** |
-| n8n workflow exports + Jira write-back | 3 | Planned |
+| n8n workflow exports + Jira write-back | 3 | Optional (Python worker is primary) |
+| Python Jira worker (`worker.py`, `run_jira_worker.py`) | 3 | **Implemented** |
+| Jira comment formatter (Mermaid ADF) | 3 | **Implemented** |
+| Team mapping JSON | 3 | **Implemented** |
 | On-resolve Pinecone re-ingest (webhook + poll) | 3.1 | **Implemented** ([`src/services/resolve_ingest_service.py`](../src/services/resolve_ingest_service.py)) |
 | `POST /api/v1/ingest/resolved` | 3.1 | **Implemented** |
 | Poll script `poll_resolved_ingest.py` | 3.1 | **Implemented** |
