@@ -130,7 +130,7 @@ When RAG is disabled or fails, diagram fields and summary are empty strings; `si
 
 * [`train.py`](../src/models/train.py) — TF-IDF + Logistic Regression pickles; not default runtime.
 
-## 4. RAG Architecture Flow (Phase 2 — Planned)
+## 4. RAG Architecture Flow (Phase 2 — Implemented)
 
 Executed inside the background triage worker **after** (or in parallel with) ML classification when `RAG_ENABLED=true`.
 
@@ -413,10 +413,11 @@ ticket_routing_agent/
 | Idempotency + optional API key | 1 | **Implemented** |
 | Unit / integration tests (core API) | 1 | **Implemented** |
 | Dockerfile | 1/4 | **Implemented** (compose expansion planned) |
-| RAG: embeddings + Pinecone query | 2 | Planned |
-| RAG: problem + resolution Mermaid flowcharts | 2 | Planned |
-| RAG: LLM flowchart generator (`flowchart_generator.py`) | 2 | Planned |
-| API schema: `problem_flowchart_mermaid`, `resolution_flowchart_mermaid`, audit `similar_past_tickets` | 2 | Planned |
+| RAG: embeddings + Pinecone query | 2 | **Implemented** ([`src/rag/retriever.py`](../src/rag/retriever.py)) |
+| RAG: problem + resolution Mermaid flowcharts | 2 | **Implemented** ([`src/rag/flowchart_generator.py`](../src/rag/flowchart_generator.py)) |
+| RAG: LLM client (Ollama / OpenAI) | 2 | **Implemented** ([`src/integrations/llm/client.py`](../src/integrations/llm/client.py)) |
+| RAG: `rag_service` orchestration | 2 | **Implemented** ([`src/services/rag_service.py`](../src/services/rag_service.py)) |
+| API schema: `problem_flowchart_mermaid`, `resolution_flowchart_mermaid`, audit `similar_past_tickets` | 2 | **Implemented** |
 | n8n workflow exports + Jira write-back | 3 | Planned |
 | On-resolve Pinecone re-ingest (webhook + poll) | 3.1 | **Implemented** ([`src/services/resolve_ingest_service.py`](../src/services/resolve_ingest_service.py)) |
 | `POST /api/v1/ingest/resolved` | 3.1 | **Implemented** |

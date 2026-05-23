@@ -191,3 +191,44 @@ class TestTriageEndpoints:
             headers={"X-API-Key": "ingest-secret"},
         )
         assert r.status_code == 200
+
+    def test_triage_includes_rag_fields_when_enabled(self, monkeypatch):
+        monkeypatch.setenv("RAG_ENABLED", "true")
+        get_settings.cache_clear()
+
+        from src.services.rag_service import RagResult
+
+        def fake_load(self):
+            self._pipeline = lambda text, candidate_labels: {
+                "labels": ["DevOps"],
+                "scores": [0.95],
+            }
+
+        monkeypatch.setattr(MLClassifier, "_load_pipeline", fake_load)
+
+        mock_rag = MagicMock()
+        mock_rag.run_rag.return_value = RagResult(
+            problem_flowchart_mermaid="flowchart TD\n  A[VPN] --> B[Check]",
+            resolution_flowchart_mermaid="flowchart TD\n  P[Past fix] --> Q[Done]",
+            rag_resolution_summary="Renew certificate for VPN issues.",
+            similar_past_tickets=["DEMO-1"],
+        )
+        routes.triage_service._rag_service = mock_rag
+        routes.triage_service._classifier = None
+        routes.cache_service.clear()
+
+        ticket_id = "TICKET-RAG-1"
+        payload = {
+            "ticket_id": ticket_id,
+            "title": "VPN issue",
+            "description": "Connection drops",
+            "created_at": datetime.now().isoformat(),
+        }
+        assert client.post("/api/v1/triage", json=payload).status_code == 202
+        body = client.get(f"/api/v1/triage/{ticket_id}").json()
+        assert body["status"] == "completed"
+        assert body["problem_flowchart_mermaid"].startswith("flowchart TD")
+        assert body["resolution_flowchart_mermaid"].startswith("flowchart TD")
+        assert body["rag_resolution_summary"]
+        assert body["similar_past_tickets"] == ["DEMO-1"]
+        mock_rag.run_rag.assert_called_once()

@@ -78,9 +78,9 @@ ticket_routing_agent/
 
 ### 2.1 Configuration & dependencies
 
-- [ ] Add to `requirements.txt`: `sentence-transformers`, `pinecone-client` (or official SDK), `langchain` or `llamaindex`, `httpx` (already present).
-- [ ] Extend `src/config.py` and `.env.example`: `RAG_ENABLED`, `PINECONE_*`, `EMBEDDING_MODEL_NAME`, `RAG_TOP_K`, `OLLAMA_*`, `LLM_PROVIDER`, `FLOWCHART_MAX_NODES`, optional cloud LLM keys.
-- [ ] Document BYOK: no secrets in Docker image; keys only via `.env`.
+- [x] Add to `requirements.txt`: `sentence-transformers`, `pinecone-client`, `httpx`.
+- [x] Extend `src/config.py` and `.env.example`: `RAG_ENABLED`, `PINECONE_*`, `EMBEDDING_MODEL_NAME`, `RAG_TOP_K`, `OLLAMA_*`, `LLM_PROVIDER`, `FLOWCHART_MAX_NODES`, optional OpenAI keys.
+- [x] Document BYOK: no secrets in Docker image; keys only via `.env`.
 
 ### 2.2 Embeddings module
 
@@ -90,39 +90,32 @@ ticket_routing_agent/
 
 - [x] `src/rag/pinecone_client.py` — upsert, query, ensure_serverless_index.
 - [x] Phase 5 ingest: `scripts/ingest.py` + `src/data/historical_tickets.csv` (dummy/Jira sources).
-- [ ] Define metadata schema used by flowchart prompts: `title`, `description`, `resolution_text`, `team`, `resolved_at`.
+- [x] Metadata schema for flowchart prompts: `title`, `description`, `resolution_text`, `team`, `resolved_at` ([`src/rag/retriever.py`](../src/rag/retriever.py) `METADATA_KEYS`).
 
 ### 2.4 Retrieval & flowchart generation
 
-- [ ] Create `src/rag/retriever.py`: embed ticket → Pinecone top_k → return audit `similar_past_tickets` + context blobs for LLM (not agent-facing).
-- [ ] Create `src/rag/flowchart_generator.py`:
-  - `generate_problem_flowchart(title, description) -> str` (Mermaid)
-  - `generate_resolution_flowchart(title, description, contexts) -> str` (Mermaid from top-k metadata)
-  - System prompts: valid Mermaid only, `flowchart TD`/`LR`, max nodes (`FLOWCHART_MAX_NODES`)
-  - Optional: lightweight Mermaid syntax validation / retry
-- [ ] Create `src/rag/resolution_generator.py` (optional): short `rag_resolution_summary` caption only.
+- [x] Create `src/rag/retriever.py`: embed ticket → Pinecone top_k → audit ids + context blobs.
+- [x] Create `src/rag/flowchart_generator.py`: problem + resolution Mermaid via BYOK LLM.
+- [x] Create `src/rag/resolution_generator.py`: short `rag_resolution_summary` caption.
+- [x] Create `src/integrations/llm/client.py`: Ollama + OpenAI-compatible chat.
 
 ### 2.5 Service orchestration
 
-- [ ] Create `src/services/rag_service.py`: `run_rag(...) -> RagResult` with diagram fields + audit ids.
-- [ ] Update `src/services/triage_service.py`: after classify, if `RAG_ENABLED`, call `rag_service`; merge into `TicketStatusResponse`.
-- [ ] On RAG failure: log warning; empty diagram fields; keep routing result.
+- [x] Create `src/services/rag_service.py`: `run_rag(...) -> RagResult`.
+- [x] Update `src/services/triage_service.py`: after classify, if `RAG_ENABLED`, call `rag_service`.
+- [x] On RAG failure: log warning; empty diagram fields; keep routing result.
 
 ### 2.6 API schema & callback
 
-- [ ] Update `src/api/v1/schemas.py` `TicketStatusResponse`:
-  - `problem_flowchart_mermaid: str = ""`
-  - `resolution_flowchart_mermaid: str = ""`
-  - `rag_resolution_summary: str = ""` (optional caption)
-  - `similar_past_tickets: list[str] = []` (audit only)
-- [ ] Ensure `callback_service` serializes all fields via `model_dump`.
-- [ ] Update `tests/test_api.py`: stub `rag_service` returning sample Mermaid strings.
+- [x] Update `src/api/v1/schemas.py` `TicketStatusResponse` with RAG fields.
+- [x] Ensure `callback_service` serializes all fields via `model_dump`.
+- [x] Update `tests/test_api.py`: stub `rag_service` returning sample Mermaid strings.
 
 ### 2.7 Tests & validation
 
-- [ ] `tests/test_rag_service.py` / `tests/test_flowchart_generator.py` with mocked Pinecone + LLM.
-- [ ] `tests/test_embeddings.py` dimension sanity check (done).
-- [ ] Manual: seed Pinecone → POST triage → GET returns two non-empty Mermaid blocks; render in GitHub/Jira preview.
+- [x] `tests/test_rag_service.py`, `tests/test_flowchart_generator.py`, `tests/test_retriever.py`, `tests/test_llm_client.py`.
+- [x] `tests/test_embeddings.py` dimension sanity check.
+- [ ] Manual: seed Pinecone → POST triage → GET returns two non-empty Mermaid blocks; render in GitHub/Jira preview (requires live Ollama + Pinecone).
 
 ---
 

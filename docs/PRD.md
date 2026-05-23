@@ -7,7 +7,7 @@ The **Automated Ticket Routing** product is a **headless, Bring-Your-Own-Key (BY
 | Phase | Name | Status |
 |-------|------|--------|
 | **Phase 1** | ML Triage Engine | **Implemented** — webhook ingest, zero-shot routing, HITL, async processing, optional outbound callback |
-| **Phase 2** | RAG Resolution Engine | **Planned** — retrieval + **resolution flowcharts** (problem map + how past fixes flowed) |
+| **Phase 2** | RAG Resolution Engine | **Implemented** — Pinecone retrieval + Mermaid flowcharts via BYOK LLM |
 | **Phase 3** | Jira Orchestration (Python) | **Planned** — poll/webhook worker, assignee update, post flowcharts to Jira |
 | **Phase 3.1** | On-Resolve Re-Ingest | **Implemented** — Jira resolve → Pinecone upsert (webhook + poll fallback) |
 | **Phase 4** | Packaging & Local Stack | **Planned** — single `docker-compose up`, single `.env` for all services |
@@ -27,7 +27,7 @@ The **Automated Ticket Routing** product is a **headless, Bring-Your-Own-Key (BY
 * **Human-in-the-Loop (HITL):** Flag tickets when confidence is below 80% for manual review.
 * **Result Retrieval:** Poll by `ticket_id` or receive an optional HTTP callback.
 
-### Phase 2 — RAG Resolution Engine (Planned)
+### Phase 2 — RAG Resolution Engine (Implemented)
 
 * **Historical retrieval (internal):** Query **Pinecone** for top-k similar resolved tickets; use metadata (`resolution_text`, `ticket_id`) as **LLM context only**—not as the primary agent-facing artifact.
 * **Problem flowchart:** A **local LLM** (e.g. Ollama) or BYOK API generates a **Mermaid flowchart** of the current issue: symptoms, likely components, decision branches, and escalation paths—so the assignee sees how the problem is structured before acting.

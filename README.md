@@ -52,11 +52,11 @@ JSON body: `ticket_id`, `title`, `description`, `created_at` (ISO datetime).
 
 ### GET /api/v1/triage/{ticket_id}
 
-Retrieve classification result (`completed`, `failed`, or `processing`).
+Retrieve classification result (`completed`, `failed`, or `processing`). When `RAG_ENABLED=true`, completed responses also include `problem_flowchart_mermaid`, `resolution_flowchart_mermaid`, `rag_resolution_summary`, and audit-only `similar_past_tickets`.
 
 ## Outbound routing callback
 
-When `TRIAGE_CALLBACK_URL` is non-empty, after each triage finishes (`completed` or `failed`) the service **POSTs** JSON to that URL with the same fields as GET: `ticket_id`, `assigned_team`, `confidence_score`, `requires_hitl`, `status`.
+When `TRIAGE_CALLBACK_URL` is non-empty, after each triage finishes (`completed` or `failed`) the service **POSTs** JSON to that URL with the same fields as GET (including RAG flowchart fields when enabled).
 
 - `TRIAGE_CALLBACK_API_KEY`: if set, sent as `X-API-Key` on the outbound request.
 - `TRIAGE_CALLBACK_TIMEOUT_SECONDS`, `TRIAGE_CALLBACK_RETRIES`: control httpx timeout and retry count (retries are best-effort; failures are logged and do not roll back the cached result).
@@ -136,6 +136,24 @@ PYTHONPATH=. python scripts/pinecone_smoke_query.py "VPN issue"
 
 See [docs/PHASE5_SETUP.md](docs/PHASE5_SETUP.md).
 
+## Phase 2: Enable RAG flowcharts
+
+After Pinecone is populated (Phase 5), enable live retrieval + Mermaid generation:
+
+```bash
+# .env
+RAG_ENABLED=true
+PINECONE_API_KEY=your-key
+LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.2
+
+# Start Ollama and pull model: ollama pull llama3.2
+uvicorn src.main:app --reload
+```
+
+POST a ticket → GET result includes `problem_flowchart_mermaid`, `resolution_flowchart_mermaid`, `rag_resolution_summary`, and audit-only `similar_past_tickets`.
+
 ## Keeping Pinecone fresh (Phase 3.1)
 
 After Phase 5 cold start, enable continuous re-ingest when Jira issues are resolved:
@@ -156,6 +174,7 @@ See [docs/PHASE3_1_ON_RESOLVE_INGEST.md](docs/PHASE3_1_ON_RESOLVE_INGEST.md).
 - [docs/PRD.md](docs/PRD.md) — product requirements (Phases 1–5)
 - [docs/TRD.md](docs/TRD.md) — technical architecture, API contracts, RAG flow
 - [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) — Phase 2/4 build checklist and target folder structure
+- [docs/PHASE2_SETUP.md](docs/PHASE2_SETUP.md) — enable RAG flowcharts (Ollama + Pinecone)
 - [docs/PHASE3_1_ON_RESOLVE_INGEST.md](docs/PHASE3_1_ON_RESOLVE_INGEST.md) — on-resolve continuous re-ingest
 - [docs/INTEGRATION_N8N_JIRA.md](docs/INTEGRATION_N8N_JIRA.md) — Jira + n8n integration
 - [docs/HANDOFF_N8N_JIRA_PROMPT.md](docs/HANDOFF_N8N_JIRA_PROMPT.md) — handoff prompt for building n8n workflows

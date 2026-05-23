@@ -12,6 +12,7 @@ from src.models.ml_classifier import MLClassifier
 
 if TYPE_CHECKING:
     from src.services.callback_service import RoutingCallbackService
+    from src.services.rag_service import RagService
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +22,11 @@ class TriageService:
         self,
         cache_service: Optional[CacheService] = None,
         callback_service: Optional[RoutingCallbackService] = None,
+        rag_service: Optional[RagService] = None,
     ):
         self.cache_service = cache_service if cache_service is not None else CacheService()
         self._classifier: Optional[MLClassifier] = None
+        self._rag_service = rag_service
         if callback_service is not None:
             self.callback_service = callback_service
         else:
@@ -36,7 +39,15 @@ class TriageService:
         if self._classifier is None:
             self._classifier = MLClassifier()
         return self._classifier
-    
+
+    @property
+    def rag_service(self) -> RagService:
+        if self._rag_service is None:
+            from src.services.rag_service import RagService as _RagService
+
+            self._rag_service = _RagService()
+        return self._rag_service
+
     def process_triage(self, request: TicketPayload) -> TicketStatusResponse:
         logger.info(f"Processing triage for ticket: {request.ticket_id}")
 
@@ -48,12 +59,18 @@ class TriageService:
 
             requires_hitl = confidence_score < get_settings().HITL_THRESHOLD
 
+            rag = self._run_rag_if_enabled(request.title, request.description)
+
             result = TicketStatusResponse(
                 ticket_id=request.ticket_id,
                 assigned_team=assigned_team,
                 confidence_score=confidence_score,
                 requires_hitl=requires_hitl,
                 status="completed",
+                problem_flowchart_mermaid=rag.problem_flowchart_mermaid,
+                resolution_flowchart_mermaid=rag.resolution_flowchart_mermaid,
+                rag_resolution_summary=rag.rag_resolution_summary,
+                similar_past_tickets=rag.similar_past_tickets,
             )
 
             self.cache_service.set(request.ticket_id, result)
@@ -73,3 +90,11 @@ class TriageService:
             self.cache_service.set(request.ticket_id, result)
             self.callback_service.notify_triage_result(result)
             return result
+
+    def _run_rag_if_enabled(self, title: str, description: str):
+        settings = get_settings()
+        if not settings.RAG_ENABLED:
+            from src.services.rag_service import RagResult
+
+            return RagResult()
+        return self.rag_service.run_rag(title, description)

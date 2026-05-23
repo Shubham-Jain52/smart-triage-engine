@@ -17,6 +17,10 @@ class TicketStatusResponse(BaseModel):
     confidence_score: float = Field(..., ge=0.0, le=1.0)
     requires_hitl: bool
     status: str
+    problem_flowchart_mermaid: str = ""
+    resolution_flowchart_mermaid: str = ""
+    rag_resolution_summary: str = ""
+    similar_past_tickets: list[str] = Field(default_factory=list)
 
 
 class TriageAcceptedResponse(BaseModel):

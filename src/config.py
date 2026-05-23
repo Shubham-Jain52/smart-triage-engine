@@ -42,6 +42,17 @@ class Settings:
         ).strip()
         self.RAG_TOP_K: int = int(os.getenv("RAG_TOP_K", "3"))
 
+        # Phase 2 — LLM flowchart generation (BYOK)
+        self.LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "ollama").strip().lower()
+        self.OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").strip().rstrip("/")
+        self.OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "llama3.2").strip()
+        self.OLLAMA_TIMEOUT_SECONDS: float = float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "120"))
+        self.OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "").strip()
+        self.OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip()
+        self.OPENAI_BASE_URL: str = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").strip().rstrip("/")
+        self.FLOWCHART_MAX_NODES: int = int(os.getenv("FLOWCHART_MAX_NODES", "15"))
+        self.FLOWCHART_LLM_RETRIES: int = int(os.getenv("FLOWCHART_LLM_RETRIES", "1"))
+
         # Phase 5 — Jira historical ingest
         self.JIRA_BASE_URL: str = os.getenv("JIRA_BASE_URL", "").strip().rstrip("/")
         self.JIRA_EMAIL: str = os.getenv("JIRA_EMAIL", "").strip()
