@@ -20,6 +20,7 @@
 | Vector DB | **Pinecone** (BYOK API key + index) |
 | Embeddings | **Sentence-Transformers** (local embedding generation) |
 | RAG orchestration | **LangChain** or **LlamaIndex** (retrieval + prompt assembly) |
+| Diagram format | **Mermaid** (flowchart syntax in API + Jira comments) |
 | LLM inference | **Ollama** (local default) or BYOK cloud API (OpenAI-compatible / Anthropic per config) |
 
 ### Phase 3–4 — Orchestration & Packaging (Planned)
@@ -82,10 +83,12 @@ Retrieves the full triage result when processing completes.
 
 **Response — Phase 2 fields (planned, required when RAG enabled):**
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `rag_resolution_summary` | string | 2–3 sentence LLM-generated resolution strategy from retrieved context |
-| `similar_past_tickets` | array of string | Top-k historical ticket IDs from Pinecone (e.g. `["IT-101", "IT-88", "IT-55"]`) |
+| Field | Type | Agent-facing | Description |
+|-------|------|----------------|-------------|
+| `problem_flowchart_mermaid` | string | **Yes** | Mermaid `flowchart` for the **current** ticket (symptoms → checks → branches) |
+| `resolution_flowchart_mermaid` | string | **Yes** | Mermaid `flowchart` summarizing **how similar past tickets were fixed** (merged from top-k retrieval) |
+| `rag_resolution_summary` | string | Optional | Short caption above diagrams (1–2 sentences); not a substitute for flowcharts |
+| `similar_past_tickets` | array of string | **No** (audit) | Top-k Pinecone ids for logs/support; **omit from default Jira comment** |
 
 **Example completed response:**
 
@@ -96,12 +99,16 @@ Retrieves the full triage result when processing completes.
   "confidence_score": 0.91,
   "requires_hitl": false,
   "status": "completed",
-  "rag_resolution_summary": "Similar VPN dropouts were resolved by renewing the client certificate and clearing stale sessions on the gateway. Check user cert expiry and gateway session table before escalating.",
-  "similar_past_tickets": ["IT-1042", "IT-987", "IT-801"]
+  "rag_resolution_summary": "VPN-style connectivity issue; past fixes focused on cert and session state.",
+  "problem_flowchart_mermaid": "flowchart TD\n  A[User reports VPN drop] --> B{Auth OK?}\n  B -->|No| C[Check cert expiry]\n  B -->|Yes| D[Check gateway sessions]",
+  "resolution_flowchart_mermaid": "flowchart TD\n  P1[Past: VPN drops] --> P2[Renew client cert]\n  P2 --> P3[Clear stale sessions]\n  P3 --> P4[Verify stable 30m]",
+  "similar_past_tickets": ["DEMO-101", "DEMO-111", "DEMO-106"]
 }
 ```
 
-When RAG is disabled or fails, `rag_resolution_summary` may be empty and `similar_past_tickets` an empty array; routing fields remain populated if classification succeeded.
+When RAG is disabled or fails, diagram fields and summary are empty strings; `similar_past_tickets` is `[]`; routing fields remain populated if classification succeeded.
+
+**Jira comment layout (Phase 3):** Post two fenced Mermaid blocks (problem, then past resolutions). Do not paste `similar_past_tickets` as the primary guidance for agents.
 
 **Outbound callback:** If `TRIAGE_CALLBACK_URL` is set, the same JSON body (including Phase 2 fields) is POSTed to n8n or the ticketing platform when status becomes terminal.
 
@@ -134,19 +141,36 @@ Executed inside the background triage worker **after** (or in parallel with) ML 
 2. Generate embedding locally
    └── Sentence-Transformers model (config: EMBEDDING_MODEL_NAME)
 
-3. Query Pinecone
+3. Query Pinecone (internal)
    └── index.query(vector, top_k=3, include_metadata)
-   └── collect historical ticket_ids + resolution snippets from metadata
+   └── collect resolution_text + ticket_id per match (audit list only)
 
-4. LLM synthesis
-   └── Build prompt: current ticket + top-3 past contexts
-   └── Ollama (OLLAMA_BASE_URL, OLLAMA_MODEL) or BYOK LLM API
-   └── Output: rag_resolution_summary (2–3 sentences)
+4. LLM — problem flowchart
+   └── Prompt: current ticket only
+   └── Output: problem_flowchart_mermaid (valid Mermaid flowchart TD/LR)
 
-5. Persist in cache + callback payload
-   └── similar_past_tickets = [id1, id2, id3]
-   └── rag_resolution_summary = string
+5. LLM — resolution flowchart
+   └── Prompt: current ticket + top-k problem/resolution metadata (no requirement to label nodes with ticket ids)
+   └── Output: resolution_flowchart_mermaid (merged “how we fixed similar issues” path)
+
+6. Optional caption
+   └── rag_resolution_summary (1–2 sentences)
+
+7. Persist in cache + callback payload
+   └── similar_past_tickets = [id1, id2, id3]  (API audit; not shown in default Jira UI)
+   └── problem_flowchart_mermaid, resolution_flowchart_mermaid
 ```
+
+### 4.1 Flowchart generation rules
+
+| Diagram | Input | Intent |
+|---------|--------|--------|
+| **Problem** | Current title + description | Help assignee **structure** the incident (symptoms, decision points) |
+| **Resolution** | Top-k `resolution_text` from Pinecone | Help assignee see a **proven fix path** abstracted from history |
+
+* **Format:** Mermaid only in v1 (`flowchart TD` or `flowchart LR`); validate syntax before returning (retry or sanitize on parse failure).
+* **No chunking** in Pinecone ingest; flowcharts are generated at **query time**, not stored as vectors.
+* **Privacy:** Diagram generation uses the same local/BYOK LLM policy as summaries; no extra external calls beyond configured provider.
 
 **Pinecone metadata (required for Phase 2 + populated by Phase 5):**
 
@@ -221,9 +245,43 @@ Phase 5 (ingest.py)  ──►  Pinecone index populated
                               │
 Phase 2 (live RAG)   ◄──  query + LLM (requires non-empty index)
 Phase 3 (n8n)        ◄──  uses Phase 2 output on new tickets
+Phase 3.1 (on-resolve) ──►  incremental Pinecone upsert after each resolve
 ```
 
-Optional future work (out of Phase 5 scope): continuous ingest on Jira “issue resolved” events via n8n or webhook—not the one-time cold-start script.
+### 5.5 Phase 3.1 — On-Resolve Re-Ingest (Implemented)
+
+Continuous ingest when Jira issues are resolved. Reuses Phase 5 pipeline (`upsert_tickets_to_pinecone`, same metadata schema). Does **not** ingest open tickets or live triage POSTs.
+
+**Triggers:**
+
+| Trigger | Entry point | When to use |
+|---------|-------------|-------------|
+| Webhook (primary) | `POST /api/v1/ingest/resolved` | Jira Automation on status → Resolved/Done/Closed |
+| Poll (fallback) | `scripts/poll_resolved_ingest.py --once` | Cron when webhooks unavailable |
+
+**API — POST `/api/v1/ingest/resolved`**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `ticket_id` | string | Yes | Jira issue key (e.g. `PROJ-42`) |
+
+**Response (200):**
+
+```json
+{
+  "ticket_id": "PROJ-42",
+  "status": "ingested",
+  "message": "upserted 1 vector(s)"
+}
+```
+
+`status`: `ingested` | `skipped` | `failed`. Auth: optional `X-API-Key` when `WEBHOOK_INGEST_API_KEY` is set.
+
+**Skip rules:** non-resolved status; empty title+description; optional skip when `INGEST_ON_RESOLVE_REQUIRE_RESOLUTION=true` and no usable resolution text.
+
+**Config:** `INGEST_ON_RESOLVE_ENABLED`, `INGEST_ON_RESOLVE_REQUIRE_RESOLUTION`, `INGEST_ON_RESOLVE_POLL_MINUTES`, `INGEST_ON_RESOLVE_POLL_INTERVAL_SECONDS`.
+
+**Implementation:** [`src/services/resolve_ingest_service.py`](../src/services/resolve_ingest_service.py), [`scripts/poll_resolved_ingest.py`](../scripts/poll_resolved_ingest.py). Operator guide: [PHASE3_1_ON_RESOLVE_INGEST.md](PHASE3_1_ON_RESOLVE_INGEST.md).
 
 ## 6. n8n Workflow Requirements (Phase 3 — Planned)
 
@@ -235,7 +293,7 @@ Reference implementation lives under `integrations/n8n/`. Minimum node graph:
 | 2 | **HTTP Request** | `POST` `{TRIAGE_API_URL}/api/v1/triage` with mapped `ticket_id`, `title`, `description`, `created_at` |
 | 3 | **Wait / Loop** | Poll `GET /api/v1/triage/{ticket_id}` until `status` ≠ `processing` **or** separate workflow triggered by `TRIAGE_CALLBACK_URL` webhook |
 | 4 | **Jira** — Update issue | Set assignee / component / labels from `assigned_team`; handle `requires_hitl` |
-| 5 | **Jira** — Add comment | Internal comment body = `rag_resolution_summary` + optional list of `similar_past_tickets` |
+| 5 | **Jira** — Add comment | Internal comment: caption + **problem** Mermaid block + **past resolutions** Mermaid block (not a similar-ticket list) |
 
 **Field mapping (Jira → POST body):**
 
@@ -246,16 +304,24 @@ Reference implementation lives under `integrations/n8n/`. Minimum node graph:
 | `description` | `fields.description` |
 | `created_at` | `fields.created` |
 
-**Comment template (example):**
+**Jira comment template (Python worker / Phase 3 example):**
 
 ```text
-[Auto-Triage] Suggested resolution:
-{{ $json.rag_resolution_summary }}
+[Auto-Triage] Team: {{ assigned_team }} | Confidence: {{ confidence_score }} | HITL: {{ requires_hitl }}
+{{ rag_resolution_summary }}
 
-Similar past tickets: {{ $json.similar_past_tickets.join(', ') }}
-Routed to: {{ $json.assigned_team }} (confidence: {{ $json.confidence_score }})
-HITL required: {{ $json.requires_hitl }}
+h3. Current problem (flowchart)
+```mermaid
+{{ problem_flowchart_mermaid }}
 ```
+
+h3. How similar issues were resolved (flowchart)
+```mermaid
+{{ resolution_flowchart_mermaid }}
+```
+```
+
+Audit ids (`similar_past_tickets`) may be logged server-side or appended in debug mode only (`INCLUDE_TICKET_IDS_IN_COMMENT=false` default).
 
 See [INTEGRATION_N8N_JIRA.md](INTEGRATION_N8N_JIRA.md) for poll vs callback patterns.
 
@@ -279,9 +345,9 @@ Jira (Issue Created)
     → HTTP POST /api/v1/triage (202)
     → FastAPI BackgroundTasks
          ├─ Zero-shot classify → assigned_team, confidence, requires_hitl
-         └─ RAG pipeline (Phase 2) → similar_past_tickets, rag_resolution_summary
-    → GET result OR callback POST to n8n webhook
-    → n8n Jira: Update assignee + Add internal comment
+         └─ RAG (Phase 2) → problem + resolution Mermaid flowcharts
+    → GET result OR callback POST
+    → Python Jira worker: Update assignee + Add comment with diagrams
 ```
 
 ## 8. Docker Compose Topology (Phase 4 — Planned)
@@ -327,7 +393,8 @@ ticket_routing_agent/
 │   ├── rag/                           # Phase 2
 │   │   ├── pinecone_client.py
 │   │   ├── retriever.py
-│   │   └── resolution_generator.py
+│   │   ├── flowchart_generator.py       # problem + resolution Mermaid via LLM
+│   │   └── resolution_generator.py      # optional caption / legacy summary
 │   └── services/
 │       ├── triage_service.py          # orchestrates classify + RAG
 │       ├── rag_service.py             # Phase 2
@@ -347,9 +414,13 @@ ticket_routing_agent/
 | Unit / integration tests (core API) | 1 | **Implemented** |
 | Dockerfile | 1/4 | **Implemented** (compose expansion planned) |
 | RAG: embeddings + Pinecone query | 2 | Planned |
-| RAG: LLM resolution summary | 2 | Planned |
-| API schema: `rag_resolution_summary`, `similar_past_tickets` | 2 | Planned |
+| RAG: problem + resolution Mermaid flowcharts | 2 | Planned |
+| RAG: LLM flowchart generator (`flowchart_generator.py`) | 2 | Planned |
+| API schema: `problem_flowchart_mermaid`, `resolution_flowchart_mermaid`, audit `similar_past_tickets` | 2 | Planned |
 | n8n workflow exports + Jira write-back | 3 | Planned |
+| On-resolve Pinecone re-ingest (webhook + poll) | 3.1 | **Implemented** ([`src/services/resolve_ingest_service.py`](../src/services/resolve_ingest_service.py)) |
+| `POST /api/v1/ingest/resolved` | 3.1 | **Implemented** |
+| Poll script `poll_resolved_ingest.py` | 3.1 | **Implemented** |
 | docker-compose (api + n8n + ollama) | 4 | Planned |
 | Single `.env` for full stack | 4 | Planned |
 | **`ingest.py` Jira → Pinecone cold start** | 5 | **Implemented** ([`scripts/ingest.py`](../scripts/ingest.py)) |
@@ -372,7 +443,9 @@ ticket_routing_agent/
 | `OLLAMA_BASE_URL` | 2 | Local LLM base URL |
 | `OLLAMA_MODEL` | 2 | Model tag for resolution generation |
 | `LLM_PROVIDER` | 2 | `ollama` \| `openai` \| … |
-| `N8N_HOST`, `TRIAGE_API_URL` | 4 | Compose service URLs |
+| `FLOWCHART_MAX_NODES` | 2 | Cap diagram size (default e.g. 15) |
+| `INCLUDE_TICKET_IDS_IN_COMMENT` | 3 | Default `false` — hide `similar_past_tickets` from Jira |
+| `TRIAGE_API_URL` | 3/4 | Base URL for Python worker → triage API |
 | `JIRA_BASE_URL` | 5 | e.g. `https://<site>.atlassian.net` |
 | `JIRA_EMAIL` | 5 | API token owner email (Cloud) |
 | `JIRA_API_TOKEN` | 5 | BYOK Jira credential |
@@ -380,6 +453,10 @@ ticket_routing_agent/
 | `INGEST_JQL` | 5 | Override default resolved-ticket query |
 | `INGEST_MONTHS` | 5 | Lookback window (default `12`) |
 | `INGEST_BATCH_SIZE` | 5 | Pinecone upsert batch size |
+| `INGEST_ON_RESOLVE_ENABLED` | 3.1 | Master switch for on-resolve ingest |
+| `INGEST_ON_RESOLVE_REQUIRE_RESOLUTION` | 3.1 | Skip when no usable resolution text |
+| `INGEST_ON_RESOLVE_POLL_MINUTES` | 3.1 | Poll script JQL lookback |
+| `INGEST_ON_RESOLVE_POLL_INTERVAL_SECONDS` | 3.1 | Poll daemon interval |
 
 Existing Phase 1 variables remain documented in [`.env.example`](../.env.example).
 

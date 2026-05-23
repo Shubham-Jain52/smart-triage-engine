@@ -164,3 +164,30 @@ class TestTriageEndpoints:
         assert r2.status_code == 202
         assert r2.json()["status"] == "completed"
         mock_cb.notify_triage_result.assert_not_called()
+
+    def test_ingest_resolved_success(self, monkeypatch):
+        monkeypatch.setenv("INGEST_ON_RESOLVE_ENABLED", "true")
+        get_settings.cache_clear()
+
+        from src.services.resolve_ingest_service import IngestResult
+
+        mock_result = IngestResult(ticket_id="PROJ-99", status="ingested", message="upserted 1 vector(s)")
+        routes.resolve_ingest_service.ingest_resolved_ticket = MagicMock(return_value=mock_result)
+
+        response = client.post("/api/v1/ingest/resolved", json={"ticket_id": "PROJ-99"})
+        assert response.status_code == 200
+        body = response.json()
+        assert body["ticket_id"] == "PROJ-99"
+        assert body["status"] == "ingested"
+
+    def test_ingest_resolved_requires_x_api_key_when_configured(self, monkeypatch):
+        monkeypatch.setenv("WEBHOOK_INGEST_API_KEY", "ingest-secret")
+        get_settings.cache_clear()
+
+        assert client.post("/api/v1/ingest/resolved", json={"ticket_id": "PROJ-1"}).status_code == 401
+        r = client.post(
+            "/api/v1/ingest/resolved",
+            json={"ticket_id": "PROJ-1"},
+            headers={"X-API-Key": "ingest-secret"},
+        )
+        assert r.status_code == 200

@@ -22,3 +22,13 @@ class TicketStatusResponse(BaseModel):
 class TriageAcceptedResponse(BaseModel):
     ticket_id: str
     status: str = "processing"
+
+
+class ResolvedIngestPayload(BaseModel):
+    ticket_id: str = Field(..., description="Jira issue key (e.g. PROJ-42)")
+
+
+class ResolvedIngestResponse(BaseModel):
+    ticket_id: str
+    status: str = Field(..., description="ingested | skipped | failed")
+    message: str = ""

@@ -14,6 +14,9 @@ from src.integrations.jira.text_utils import jira_description_to_text
 
 logger = logging.getLogger(__name__)
 
+RESOLVED_STATUSES = frozenset({"Resolved", "Done", "Closed"})
+ISSUE_FIELDS = "summary,description,resolutiondate,components,comment,status"
+
 
 @dataclass
 class HistoricalTicket:
@@ -23,6 +26,7 @@ class HistoricalTicket:
     resolution_text: str
     team: str
     resolved_at: str
+    status: str = ""
 
 
 class JiraClient:
@@ -48,17 +52,57 @@ class JiraClient:
         if not key:
             raise ValueError("JIRA_PROJECT_KEY is required when INGEST_JQL is empty")
         months = settings.INGEST_MONTHS
+        status_list = ", ".join(sorted(RESOLVED_STATUSES))
         return (
-            f'project = "{key}" AND status in (Resolved, Done, Closed) '
+            f'project = "{key}" AND status in ({status_list}) '
             f"AND resolved >= -{months}m ORDER BY resolved DESC"
         )
+
+    def recently_resolved_jql(
+        self,
+        since_minutes: int,
+        project_key: Optional[str] = None,
+    ) -> str:
+        settings = get_settings()
+        key = (project_key or settings.JIRA_PROJECT_KEY).strip()
+        if not key:
+            raise ValueError("JIRA_PROJECT_KEY is required for recently resolved JQL")
+        status_list = ", ".join(sorted(RESOLVED_STATUSES))
+        return (
+            f'project = "{key}" AND status in ({status_list}) '
+            f"AND resolved >= -{since_minutes}m ORDER BY resolved DESC"
+        )
+
+    def get_issue(self, issue_key: str) -> Optional[HistoricalTicket]:
+        """Fetch a single issue by key and parse to HistoricalTicket."""
+        with httpx.Client(timeout=60.0) as client:
+            r = client.get(
+                f"{self._api}/issue/{issue_key}",
+                params={"fields": ISSUE_FIELDS},
+                auth=self._auth,
+                headers={"Accept": "application/json"},
+            )
+            r.raise_for_status()
+            return self._parse_issue(r.json())
+
+    def is_resolved_status(self, status_name: str) -> bool:
+        return status_name.strip() in RESOLVED_STATUSES
+
+    def fetch_recently_resolved(
+        self,
+        since_minutes: int,
+        project_key: Optional[str] = None,
+    ) -> List[HistoricalTicket]:
+        """Fetch issues resolved within the last ``since_minutes``."""
+        jql = self.recently_resolved_jql(since_minutes, project_key)
+        return self.fetch_resolved_tickets(jql=jql)
 
     def search_issues(self, jql: str, max_results: int = 50, start_at: int = 0) -> Dict[str, Any]:
         params = {
             "jql": jql,
             "startAt": start_at,
             "maxResults": max_results,
-            "fields": "summary,description,resolutiondate,components,comment,status",
+            "fields": ISSUE_FIELDS,
         }
         with httpx.Client(timeout=60.0) as client:
             r = client.get(
@@ -124,6 +168,9 @@ class JiraClient:
         if not resolved_at:
             resolved_at = datetime.now(timezone.utc).isoformat()
 
+        status_obj = fields.get("status") or {}
+        status_name = (status_obj.get("name") or "").strip()
+
         return HistoricalTicket(
             ticket_id=str(key),
             title=title,
@@ -131,6 +178,7 @@ class JiraClient:
             resolution_text=resolution_text,
             team=team,
             resolved_at=resolved_at,
+            status=status_name,
         )
 
     def _extract_resolution_text(self, fields: Dict[str, Any]) -> str:

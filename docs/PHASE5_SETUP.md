@@ -95,4 +95,4 @@ Metadata: ticket_id, title, description, resolution_text, team, resolved_at
 
 ## Next step
 
-Enable Phase 2 (`RAG_ENABLED=true`) after ingest succeeds.
+Enable Phase 2 (`RAG_ENABLED=true`) after ingest succeeds. Phase 2 will expose **problem** and **resolution** Mermaid flowcharts on triage GET (see [TRD.md](TRD.md) §4), not a primary list of similar ticket IDs for agents.

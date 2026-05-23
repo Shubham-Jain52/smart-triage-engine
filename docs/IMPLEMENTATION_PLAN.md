@@ -79,58 +79,78 @@ ticket_routing_agent/
 ### 2.1 Configuration & dependencies
 
 - [ ] Add to `requirements.txt`: `sentence-transformers`, `pinecone-client` (or official SDK), `langchain` or `llamaindex`, `httpx` (already present).
-- [ ] Extend `src/config.py` and `.env.example`: `RAG_ENABLED`, `PINECONE_API_KEY`, `PINECONE_INDEX_NAME`, `PINECONE_NAMESPACE`, `EMBEDDING_MODEL_NAME`, `RAG_TOP_K`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `LLM_PROVIDER`, optional cloud LLM keys.
+- [ ] Extend `src/config.py` and `.env.example`: `RAG_ENABLED`, `PINECONE_*`, `EMBEDDING_MODEL_NAME`, `RAG_TOP_K`, `OLLAMA_*`, `LLM_PROVIDER`, `FLOWCHART_MAX_NODES`, optional cloud LLM keys.
 - [ ] Document BYOK: no secrets in Docker image; keys only via `.env`.
 
 ### 2.2 Embeddings module
 
-- [ ] Create `src/models/embeddings.py`: load Sentence-Transformers model once (lazy singleton).
-- [ ] Method `embed(text: str) -> list[float]` with batching optional for ingest script.
+- [x] `src/models/embeddings.py` — embed / embed_batch / embedding_dimension.
 
 ### 2.3 Pinecone integration
 
-- [ ] Create `src/rag/pinecone_client.py`: init client from env; `query(vector, top_k)`; `upsert(records)`.
-- [ ] Define metadata schema: `ticket_id`, `title`, `resolution_text`, `team`, `resolved_at`.
-- [ ] Create `scripts/ingest_historical_tickets.py`: read CSV → embed → upsert (idempotent by `ticket_id`).
-- [ ] Add `src/data/historical_tickets.example.csv` with 5–10 sample rows.
+- [x] `src/rag/pinecone_client.py` — upsert, query, ensure_serverless_index.
+- [x] Phase 5 ingest: `scripts/ingest.py` + `src/data/historical_tickets.csv` (dummy/Jira sources).
+- [ ] Define metadata schema used by flowchart prompts: `title`, `description`, `resolution_text`, `team`, `resolved_at`.
 
-### 2.4 Retrieval & generation
+### 2.4 Retrieval & flowchart generation
 
-- [ ] Create `src/rag/retriever.py`: embed ticket → Pinecone top_k → return `similar_past_tickets` + context strings.
-- [ ] Create `src/rag/resolution_generator.py`: prompt template with current ticket + 3 contexts → call Ollama HTTP API (or BYOK LLM).
-- [ ] Enforce 2–3 sentence output in prompt; truncate on token limits.
+- [ ] Create `src/rag/retriever.py`: embed ticket → Pinecone top_k → return audit `similar_past_tickets` + context blobs for LLM (not agent-facing).
+- [ ] Create `src/rag/flowchart_generator.py`:
+  - `generate_problem_flowchart(title, description) -> str` (Mermaid)
+  - `generate_resolution_flowchart(title, description, contexts) -> str` (Mermaid from top-k metadata)
+  - System prompts: valid Mermaid only, `flowchart TD`/`LR`, max nodes (`FLOWCHART_MAX_NODES`)
+  - Optional: lightweight Mermaid syntax validation / retry
+- [ ] Create `src/rag/resolution_generator.py` (optional): short `rag_resolution_summary` caption only.
 
 ### 2.5 Service orchestration
 
-- [ ] Create `src/services/rag_service.py`: `run_rag(title, description) -> (summary, ticket_ids)`.
+- [ ] Create `src/services/rag_service.py`: `run_rag(...) -> RagResult` with diagram fields + audit ids.
 - [ ] Update `src/services/triage_service.py`: after classify, if `RAG_ENABLED`, call `rag_service`; merge into `TicketStatusResponse`.
-- [ ] On RAG failure: log warning; set empty RAG fields; keep routing result.
+- [ ] On RAG failure: log warning; empty diagram fields; keep routing result.
 
 ### 2.6 API schema & callback
 
 - [ ] Update `src/api/v1/schemas.py` `TicketStatusResponse`:
-  - `rag_resolution_summary: str = ""`
-  - `similar_past_tickets: list[str] = []`
-- [ ] Ensure `callback_service` serializes new fields (automatic via `model_dump` if on schema).
-- [ ] Update `tests/test_api.py` for RAG fields (stub rag_service in tests).
+  - `problem_flowchart_mermaid: str = ""`
+  - `resolution_flowchart_mermaid: str = ""`
+  - `rag_resolution_summary: str = ""` (optional caption)
+  - `similar_past_tickets: list[str] = []` (audit only)
+- [ ] Ensure `callback_service` serializes all fields via `model_dump`.
+- [ ] Update `tests/test_api.py`: stub `rag_service` returning sample Mermaid strings.
 
 ### 2.7 Tests & validation
 
-- [ ] `tests/test_rag_service.py` with mocked Pinecone and Ollama.
-- [ ] `tests/test_embeddings.py` dimension sanity check.
-- [ ] Manual: seed Pinecone → POST triage → GET shows summary + IDs.
+- [ ] `tests/test_rag_service.py` / `tests/test_flowchart_generator.py` with mocked Pinecone + LLM.
+- [ ] `tests/test_embeddings.py` dimension sanity check (done).
+- [ ] Manual: seed Pinecone → POST triage → GET returns two non-empty Mermaid blocks; render in GitHub/Jira preview.
 
 ---
 
-## Phase 3 — n8n + Jira (orchestration)
+## Phase 3 — Python Jira worker (orchestration)
 
-Can start after Phase 2 fields exist on GET/callback (or stub empty fields earlier).
+Can start after Phase 2 diagram fields exist on GET/callback.
 
-- [ ] Export `integrations/n8n/workflow-jira-triage-poll.json` per [TRD §5](TRD.md).
-- [ ] Add `jira-team-mapping.example.json` for `assigned_team` → assignee/component.
-- [ ] Update workflow Jira **Add Comment** node to include `rag_resolution_summary` and `similar_past_tickets`.
-- [ ] Document Jira Cloud credentials + ngrok for local dev in `integrations/n8n/README.md`.
-- [ ] End-to-end test: create Jira issue → comment appears with RAG text.
+- [ ] `src/integrations/jira/worker.py` (or `scripts/run_jira_worker.py`): poll/webhook → POST triage → GET result.
+- [ ] `src/integrations/jira/comment_formatter.py`: build Jira comment from caption + two fenced Mermaid blocks (see [TRD §6](TRD.md)).
+- [ ] `jira-team-mapping.example.json` for `assigned_team` → assignee/component; respect `requires_hitl`.
+- [ ] Env: `INCLUDE_TICKET_IDS_IN_COMMENT=false` by default.
+- [ ] End-to-end test: issue created → comment shows **problem** and **resolution** flowcharts (not a similar-ticket bullet list).
+
+**Deferred / optional:** n8n workflow exports under `integrations/n8n/` if a team prefers no-code ops later.
+
+---
+
+## Phase 3.1 — On-Resolve Re-Ingest
+
+Independent of Phase 3 create-worker; can ship once Jira + Pinecone are configured.
+
+- [x] Extend [`src/integrations/jira/client.py`](../src/integrations/jira/client.py): `get_issue`, `fetch_recently_resolved`, `RESOLVED_STATUSES`.
+- [x] [`src/services/resolve_ingest_service.py`](../src/services/resolve_ingest_service.py): fetch → validate → `upsert_tickets_to_pinecone`.
+- [x] `POST /api/v1/ingest/resolved` in [`src/api/v1/routes.py`](../src/api/v1/routes.py) + schemas.
+- [x] [`scripts/poll_resolved_ingest.py`](../scripts/poll_resolved_ingest.py): `--once`, `--dry-run`, daemon loop.
+- [x] Config: `INGEST_ON_RESOLVE_*` in [`src/config.py`](../src/config.py) and [`.env.example`](../.env.example).
+- [x] Tests: `tests/test_resolve_ingest_service.py`, `tests/test_jira_client.py`, API tests.
+- [x] Docs: [PHASE3_1_ON_RESOLVE_INGEST.md](PHASE3_1_ON_RESOLVE_INGEST.md).
 
 ---
 

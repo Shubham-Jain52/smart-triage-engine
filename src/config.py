@@ -54,6 +54,20 @@ class Settings:
         self.INGEST_SOURCE: str = os.getenv("INGEST_SOURCE", "dummy").strip().lower()
         self.INGEST_CSV_PATH: str = os.getenv("INGEST_CSV_PATH", "").strip()
 
+        # Phase 3.1 — on-resolve continuous re-ingest
+        self.INGEST_ON_RESOLVE_ENABLED: bool = (
+            os.getenv("INGEST_ON_RESOLVE_ENABLED", "false").lower() == "true"
+        )
+        self.INGEST_ON_RESOLVE_REQUIRE_RESOLUTION: bool = (
+            os.getenv("INGEST_ON_RESOLVE_REQUIRE_RESOLUTION", "true").lower() == "true"
+        )
+        self.INGEST_ON_RESOLVE_POLL_MINUTES: int = int(
+            os.getenv("INGEST_ON_RESOLVE_POLL_MINUTES", "15")
+        )
+        self.INGEST_ON_RESOLVE_POLL_INTERVAL_SECONDS: int = int(
+            os.getenv("INGEST_ON_RESOLVE_POLL_INTERVAL_SECONDS", "300")
+        )
+
 
 @lru_cache()
 def get_settings() -> Settings:

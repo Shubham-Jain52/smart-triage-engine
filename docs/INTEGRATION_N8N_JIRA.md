@@ -1,6 +1,8 @@
-# Jira + n8n integration guide
+# Jira + n8n integration guide (optional)
 
-This document describes how to connect **Jira** to the **Smart Triage Engine** microservice using **n8n** as the orchestration layer. The microservice classifies tickets; n8n applies results back to Jira.
+> **Primary plan:** **Python Jira worker** (Phase 3) posts **Mermaid flowcharts** to Jira—see [PRD.md](PRD.md) Phase 2–3 and [TRD.md](TRD.md) §4–§6. Pinecone retrieval still happens internally; agents see **problem** + **resolution** diagrams, not a bullet list of `similar_past_tickets`. This n8n doc remains as an optional alternative orchestrator.
+
+This document describes how to connect **Jira** to the **Smart Triage Engine** using **n8n**. The microservice classifies tickets and (when `RAG_ENABLED`) generates flowchart fields; n8n would apply results back to Jira.
 
 ## Microservice readiness (Phase 1)
 

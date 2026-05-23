@@ -61,20 +61,16 @@ When `TRIAGE_CALLBACK_URL` is non-empty, after each triage finishes (`completed`
 - `TRIAGE_CALLBACK_API_KEY`: if set, sent as `X-API-Key` on the outbound request.
 - `TRIAGE_CALLBACK_TIMEOUT_SECONDS`, `TRIAGE_CALLBACK_RETRIES`: control httpx timeout and retry count (retries are best-effort; failures are logged and do not roll back the cached result).
 
-## Jira + n8n integration (demo / production glue)
+## Jira integration (Phase 3 — Python worker)
 
-The triage microservice does **not** update Jira by itself. Use **n8n** (or similar) to:
+The triage service does **not** update Jira by itself. A **Python worker** will:
 
-1. Trigger on Jira issue created → **POST** `/api/v1/triage`
-2. **Poll** `GET /api/v1/triage/{issue_key}` *or* receive **`TRIAGE_CALLBACK_URL`** on an n8n Webhook
-3. Update the Jira issue (assignee, component, labels) from `assigned_team` and `requires_hitl`
+1. Trigger on new Jira issues → **POST** `/api/v1/triage`
+2. **Poll** `GET /api/v1/triage/{issue_key}` (or use callback)
+3. Update assignee/labels from `assigned_team` and `requires_hitl`
+4. Post an internal comment with **Mermaid flowcharts** (current **problem** map + **how similar issues were resolved**) — not a raw list of similar ticket IDs
 
-**Guides:**
-
-- [docs/INTEGRATION_N8N_JIRA.md](docs/INTEGRATION_N8N_JIRA.md) — architecture, API mapping, Pattern A (poll) vs B (callback)
-- [docs/HANDOFF_N8N_JIRA_PROMPT.md](docs/HANDOFF_N8N_JIRA_PROMPT.md) — copy-paste prompt for a new chat to build workflow JSON under `integrations/n8n/`
-
-**Microservice status:** Phase 1 API is **ready** for this integration; n8n workflows are the next build step (see `integrations/n8n/README.md`).
+See [docs/TRD.md](docs/TRD.md) §4 (RAG flowcharts) and §6 (comment template). Optional n8n path: [docs/INTEGRATION_N8N_JIRA.md](docs/INTEGRATION_N8N_JIRA.md).
 
 ## Simulator integration
 
@@ -140,10 +136,26 @@ PYTHONPATH=. python scripts/pinecone_smoke_query.py "VPN issue"
 
 See [docs/PHASE5_SETUP.md](docs/PHASE5_SETUP.md).
 
+## Keeping Pinecone fresh (Phase 3.1)
+
+After Phase 5 cold start, enable continuous re-ingest when Jira issues are resolved:
+
+```bash
+# .env
+INGEST_ON_RESOLVE_ENABLED=true
+
+# Jira Automation → POST /api/v1/ingest/resolved  (primary)
+# Cron fallback:
+PYTHONPATH=. python scripts/poll_resolved_ingest.py --once
+```
+
+See [docs/PHASE3_1_ON_RESOLVE_INGEST.md](docs/PHASE3_1_ON_RESOLVE_INGEST.md).
+
 ## Documentation
 
 - [docs/PRD.md](docs/PRD.md) — product requirements (Phases 1–5)
 - [docs/TRD.md](docs/TRD.md) — technical architecture, API contracts, RAG flow
 - [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) — Phase 2/4 build checklist and target folder structure
+- [docs/PHASE3_1_ON_RESOLVE_INGEST.md](docs/PHASE3_1_ON_RESOLVE_INGEST.md) — on-resolve continuous re-ingest
 - [docs/INTEGRATION_N8N_JIRA.md](docs/INTEGRATION_N8N_JIRA.md) — Jira + n8n integration
 - [docs/HANDOFF_N8N_JIRA_PROMPT.md](docs/HANDOFF_N8N_JIRA_PROMPT.md) — handoff prompt for building n8n workflows
