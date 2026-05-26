@@ -81,6 +81,33 @@ The worker:
 
 See [docs/PHASE3_SETUP.md](docs/PHASE3_SETUP.md). Optional n8n path: [docs/INTEGRATION_N8N_JIRA.md](docs/INTEGRATION_N8N_JIRA.md).
 
+## Phase 4: Local Stack Packaging (Docker Compose)
+
+The entire application stack—including the **Triage API**, **n8n workflow automation**, and local **Ollama inference**—can be started with a single command:
+
+```bash
+# 1. Start the core stack (Triage API + n8n)
+docker-compose up --build
+
+# 2. (Optional) Start with local Ollama service enabled for flowchart generation
+docker-compose --profile llm-local up --build
+```
+
+### Stack Components
+
+| Service | Port | Purpose / URL |
+|---------|------|---------------|
+| `triage-api` | `8000` | FastAPI webhook endpoint: `http://localhost:8000/health` |
+| `n8n` | `5678` | Local automation designer: `http://localhost:5678/` |
+| `ollama` | `11434` | (Optional) Local LLM endpoint: `http://localhost:11434/` |
+
+### Key Compose Features
+
+1. **Persisted Caches:** Hugging Face model weights (`valhalla/distilbart-mnli-12-1` and `sentence-transformers/all-MiniLM-L6-v2`) are stored in a host-mounted `.cache/` directory to prevent redownloads across container runs.
+2. **Network Communications:** Within the docker-compose network, other containers (like `n8n`) can reach the API via the service hostname, i.e., `TRIAGE_API_URL=http://triage-api:8000`.
+3. **Health Checks:** Self-monitoring health checks are included for both the API (`/health`) and n8n (`/healthz`).
+
+
 ## Simulator integration
 
 Align with your ticketing simulator contract:
