@@ -1,3 +1,15 @@
+---
+title: Smart Triage Engine
+emoji: 🎟️
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+---
+
+# Smart Triage Engine
+(The rest of your normal README content goes here...)
+
 # Smart Triage Engine
 
 AI-powered ticket classification system built with FastAPI. Incoming tickets are accepted on a webhook-style endpoint, classified in a **background task**, and read back by id from an in-memory cache. When configured, the service **POSTs** the final triage payload to a **routing callback URL** for the ticketing platform (TRD workflow step 4).
