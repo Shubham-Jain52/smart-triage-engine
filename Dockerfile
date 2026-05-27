@@ -5,5 +5,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends gcc curl && rm 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
-EXPOSE 8000
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Cloud Run sets the PORT environment variable dynamically (defaults to 8080)
+ENV PORT=8080
+EXPOSE $PORT
+
+CMD uvicorn src.main:app --host 0.0.0.0 --port ${PORT}
